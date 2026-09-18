@@ -2,10 +2,6 @@
 
 A C++23 client for Kalshi's trading API, built from scratch (raw POSIX sockets, OpenSSL for TLS, no networking libraries) as a learning project.
 
-## Status
-
-**Phase 1 complete:** TCP connection, TLS handshake, and an authenticated WebSocket upgrade against Kalshi's demo environment (confirmed `101 Switching Protocols`). See [`docs/tls-websocket-auth.md`](docs/tls-websocket-auth.md) for a write-up of how the TLS layer and Kalshi request signing work.
-
 ## Prerequisites
 
 - A C++23 compiler (GCC 14+ / Clang 17+)
@@ -74,6 +70,5 @@ kalshi-client/
 │   │   └── web_socket.cpp
 │   └── protocol/
 │       └── kalshi_auth.cpp
-├── docs/
 └── tests/
 ```
