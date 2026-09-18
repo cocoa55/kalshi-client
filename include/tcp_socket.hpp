@@ -11,7 +11,7 @@ private:
 public:
     [[nodiscard]] std::expected<int, std::string> connect (const std::string& host, const std::string& port);
 
-    std::expected<ssize_t, std::string> send_data(std::string& request) const;
-    std::expected<std::string, std::string> receive_data() const;
+    [[nodiscard]] std::expected<ssize_t, std::string> send_data(const std::string& request) const;
+    [[nodiscard]] std::expected<std::string, std::string> receive_data() const;
 
 };

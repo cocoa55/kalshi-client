@@ -1,8 +1,8 @@
 #pragma once
-#include "tcp_socket.hpp"
+#include "tls_socket.hpp"
 
 class WebSocket {
-    TcpSocket _tcp_socket {};
+    TlsSocket _tls_socket {};
 public:
     std::expected<void, std::string> connect(const std::string &host, const std::string &port);
 };

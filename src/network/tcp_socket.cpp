@@ -32,7 +32,7 @@ std::expected<int, std::string> TcpSocket::connect(const std::string& host, cons
     return std::unexpected("Failed to connect to any resolved address");
 }
 
-std::expected<ssize_t, std::string> TcpSocket::send_data(std::string& request) const {
+std::expected<ssize_t, std::string> TcpSocket::send_data(const std::string& request) const {
     ssize_t bytes = ::send(_fd, request.c_str(), request.length(), 0);
 
     if (bytes == -1) {

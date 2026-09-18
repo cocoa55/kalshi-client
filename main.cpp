@@ -1,18 +1,19 @@
 
 #include "include/web_socket.hpp"
-#include <iostream>
+#include <print>
+#include <cstdio>
 
 int main() {
     WebSocket ws;
-    std::cout << "Initializing connection to Kalshi... \n";
+    std::println("Initializing connection to Kalshi...");
 
-    auto result = ws.connect("api.kalshi.com", "80");
+    auto result = ws.connect("external-api-ws.demo.kalshi.co", "443");
 
     if (!result.has_value()) {
-        std::cerr << "Fatal error: " << result.error() << '\n';
+        std::println(stderr, "Fatal error: {}", result.error());
         return 1;
     }
-    std::cout << "WebSocket connection established.\n";
+    std::println("WebSocket connection established.");
 
-return 0;
+    return 0;
 }
