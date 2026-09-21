@@ -52,8 +52,8 @@ std::expected<void, std::string> TlsSocket::connect(const std::string& host, con
     return {};
 }
 
-std::expected<ssize_t, std::string> TlsSocket::send_data(const std::string& request) const {
-    const int bytes = SSL_write(_ssl.get(), request.c_str(), static_cast<int>(request.length()));
+std::expected<ssize_t, std::string> TlsSocket::send_data(std::span<const std::byte> data) const {
+    const int bytes = SSL_write(_ssl.get(), data.data(), static_cast<int>(data.size()));
     if (bytes <= 0) {
         return std::unexpected(std::format("SSL_write failed: {}", ssl_error_string()));
     }
@@ -61,13 +61,13 @@ std::expected<ssize_t, std::string> TlsSocket::send_data(const std::string& requ
     return bytes;
 }
 
-std::expected<std::string, std::string> TlsSocket::receive_data() const {
-    std::array<char, 4096> buffer{};
+std::expected<std::vector<std::byte>, std::string> TlsSocket::receive_data() const {
 
+    std::array<char, 4096> buffer{};
     const int bytes = SSL_read(_ssl.get(), buffer.data(), static_cast<int>(buffer.size()));
     if (bytes <= 0) {
         return std::unexpected(std::format("SSL_read failed: {}", ssl_error_string()));
     }
-
-    return std::string{buffer.data(), static_cast<size_t>(bytes)};
+    auto* begin = reinterpret_cast<const std::byte*>(buffer.data());
+    return std::vector<std::byte>(begin, begin + bytes);
 }

@@ -14,6 +14,11 @@ add_executable(kalshi-client main.cpp
         src/network/tls_socket.cpp
         include/kalshi_auth.hpp
         src/protocol/kalshi_auth.cpp
+        include/web_socket_frame.hpp
+        src/protocol/frame_parser.cpp
+        include/frame_parser.hpp
+        src/protocol/frame_builder.cpp
+        include/frame_builder.hpp
 )
 target_include_directories(kalshi-client PRIVATE ${CMAKE_SOURCE_DIR}/include)
 find_package(OpenSSL REQUIRED)

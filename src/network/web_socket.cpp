@@ -1,13 +1,17 @@
 #include "web_socket.hpp"
-#include "kalshi_auth.hpp"
-#include <print>
-#include <format>
 #include <array>
 #include <chrono>
-#include <string_view>
-#include <stdexcept>
-#include <openssl/rand.h>
+#include <format>
 #include <openssl/evp.h>
+#include <openssl/rand.h>
+#include <print>
+#include <stdexcept>
+#include <string_view>
+#include <sys/socket.h>
+#include "kalshi_auth.hpp"
+
+#include "frame_builder.hpp"
+#include "frame_parser.hpp"
 
 namespace {
 
@@ -67,7 +71,10 @@ std::expected<void, std::string> WebSocket::connect(const std::string &host, con
         "KALSHI-ACCESS-SIGNATURE: {}\r\n"
         "\r\n", kWebSocketPath, host, websocket_key, credentials->key_id, timestamp, *signature);
 
-    auto send_result = _tls_socket.send_data(upgrade_request);
+    std::span<const std::byte> request_bytes{reinterpret_cast<const std::byte *>(upgrade_request.data()),
+                                             upgrade_request.size()};
+
+    auto send_result = _tls_socket.send_data(request_bytes);
     if (!send_result.has_value()) {
         return std::unexpected(std::format("Failed to send data {}", send_result.error()));
     }
@@ -77,7 +84,10 @@ std::expected<void, std::string> WebSocket::connect(const std::string &host, con
         return std::unexpected(std::format("Failed to receive data {}", receive_result.error()));
     }
 
-    const std::string &response = receive_result.value();
+    const std::string response(
+            reinterpret_cast<const char*>(receive_result->data()),
+            receive_result->size()
+    );
 
     std::println("\n--- Kalshi Server Response ---");
     std::println("{}", response);
@@ -85,6 +95,29 @@ std::expected<void, std::string> WebSocket::connect(const std::string &host, con
 
     if (!response.starts_with("HTTP/1.1 101")) {
         return std::unexpected("Handshake rejected (expected HTTP 101 Switching Protocols)");
+    }
+
+    return {};
+}
+
+std::expected<WebSocketFrame, std::string> WebSocket::receive_frame() {
+    auto raw_bytes = _tls_socket.receive_data();
+    if (!raw_bytes) {
+        return std::unexpected(raw_bytes.error());
+    }
+    return frame_parser(raw_bytes.value());
+}
+
+std::expected<void, std::string> WebSocket::send_frame(const WebSocketFrame& frame) {
+
+auto out_going_frame = frame_builder(frame);
+    if (!out_going_frame.has_value()) {
+        return std::unexpected(out_going_frame.error());
+    }
+
+   auto send_result =  _tls_socket.send_data(out_going_frame.value());
+    if (!send_result.has_value()) {
+        return std::unexpected(send_result.error());
     }
 
     return {};

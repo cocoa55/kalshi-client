@@ -1,9 +1,12 @@
 #pragma once
-#include <openssl/ssl.h>
-#include <openssl/err.h>
 #include <expected>
 #include <memory>
+#include <openssl/err.h>
+#include <openssl/ssl.h>
+#include <span>
 #include <string>
+#include <vector>
+
 #include "tcp_socket.hpp"
 
 class TlsSocket {
@@ -24,6 +27,6 @@ public:
 
     [[nodiscard]] std::expected<void, std::string> connect(const std::string& host, const std::string& port);
 
-    [[nodiscard]] std::expected<ssize_t, std::string> send_data(const std::string& request) const;
-    [[nodiscard]] std::expected<std::string, std::string> receive_data() const;
+    [[nodiscard]] std::expected<ssize_t, std::string> send_data(std::span<const std::byte> data) const;
+    [[nodiscard]] std::expected<std::vector<std::byte>,std::string>receive_data() const;
 };

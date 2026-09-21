@@ -4,3 +4,4 @@ build/
 *.key
 .env
 .clang-format
+NOTES.md
