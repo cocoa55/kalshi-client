@@ -32,7 +32,7 @@ int main() {
             .payload = frame_received->payload
         };
 
-        auto frame_sent = ws.send_frame(Pong); //need to add the frame arg
+        auto frame_sent = ws.send_frame(Pong); 
         if (!frame_sent.has_value()) {
             std::println(stderr, "Failed to sendframe: {}", frame_sent.error());
             return 1;
