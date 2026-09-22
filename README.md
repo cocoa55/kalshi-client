@@ -4,16 +4,17 @@ A C++23 client for Kalshi's trading API, built from scratch (raw POSIX sockets, 
 
 ## What it does at the moment
 
-Connects to Kalshi's WebSocket API for real-time market data streaming and order management. Built from scratch using raw POSIX sockets and OpenSSL with no external networking or parsing libraries.
+Connects to Kalshi's WebSocket API, performs a TLS handshake, upgrades to WebSocket, parses incoming frames, and responds to server pings with pongs. Built from scratch using raw POSIX sockets and OpenSSL with no external networking or parsing libraries.
 
 ## Status
 
 - [x] Phase 1: TLS connection and WebSocket handshake
-- [ ] Phase 2: WebSocket frame parser  
+- [x] Phase 2: WebSocket frame parser and builder
 - [ ] Phase 3: JSON parser
 - [ ] Phase 4: REST order management
 - [ ] Phase 5: Order management system
 - [ ] Phase 6: Trading logic
+
 ## Prerequisites
 
 - A C++23 compiler (GCC 14+ / Clang 17+)
@@ -60,8 +61,6 @@ export KALSHI_PRIVATE_KEY_PATH="/path/to/demo_private_key.pem"
 
 ### Running from CLion
 
-The IDE's Run button launches the process in its own environment, separate from any shell you've exported variables in. Set them once in the run configuration instead:
-
 **Run → Edit Configurations… → `kalshi-client` → Environment variables →** add `KALSHI_API_KEY_ID` and `KALSHI_PRIVATE_KEY_PATH`.
 
 ## Project structure
@@ -74,6 +73,9 @@ kalshi-client/
 │   ├── tcp_socket.hpp
 │   ├── tls_socket.hpp
 │   ├── web_socket.hpp
+│   ├── web_socket_frame.hpp
+│   ├── frame_parser.hpp
+│   ├── frame_builder.hpp
 │   └── kalshi_auth.hpp
 ├── src/
 │   ├── network/
@@ -81,6 +83,8 @@ kalshi-client/
 │   │   ├── tls_socket.cpp
 │   │   └── web_socket.cpp
 │   └── protocol/
+│       ├── frame_parser.cpp
+│       ├── frame_builder.cpp
 │       └── kalshi_auth.cpp
 └── tests/
 ```
