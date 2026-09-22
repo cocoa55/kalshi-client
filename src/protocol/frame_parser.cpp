@@ -1,9 +1,10 @@
 #include "frame_parser.hpp"
 #include "web_socket_frame.hpp"
-#include <netinet/in.h>
-
+#include <bit>
 
 std::expected<WebSocketFrame, std::string> frame_parser(std::span<const std::byte> bytes) {
+    constexpr std::array<uint8_t, 6> valid_opcodes{0x0, 0x1, 0x2, 0x8, 0x9, 0xA};
+
         if (bytes.empty())
             return std::unexpected("Frame too short: no bytes to parse");
 
@@ -15,6 +16,9 @@ std::expected<WebSocketFrame, std::string> frame_parser(std::span<const std::byt
         auto byte0 = bytes[0];
         bool fin = (byte0 & std::byte{0x80}) != std::byte{0};
         auto raw_opcode = static_cast<uint8_t>(byte0 & std::byte {0x0F});
+        if (std::ranges::find(valid_opcodes, raw_opcode) == valid_opcodes.end()) {
+            return std::unexpected("Invalid opcode");
+        }
         auto opcode = static_cast<WebSocketFrame::Opcode>(raw_opcode);
 
         auto byte1 = bytes[1];
@@ -32,7 +36,10 @@ std::expected<WebSocketFrame, std::string> frame_parser(std::span<const std::byt
                 std::array<std::byte, 2> buf{};
                 std::ranges::copy(extended, buf.begin());
                 auto len = std::bit_cast<uint16_t>(buf);
-                len = ntohs(len);
+
+                if (std::endian::native != std::endian::big) {
+                    len = std::byteswap(len);
+                }
                 pos += 2;
                 actual_payload_len = len;
                 break;
@@ -43,8 +50,11 @@ std::expected<WebSocketFrame, std::string> frame_parser(std::span<const std::byt
                 const auto extended = bytes.subspan(pos, 8);
                 std::array<std::byte, 8> buf{};
                 std::ranges::copy(extended, buf.begin());
-                const auto len = std::bit_cast<uint64_t>(buf);
-                actual_payload_len = be64toh(len);
+                auto len = std::bit_cast<uint64_t>(buf);
+                if (std::endian::native != std::endian::big) {
+                    len = std::byteswap(len);
+                }
+                actual_payload_len = len;
                 pos += 8;
                 break;
             }//read 8 bytes
@@ -64,7 +74,7 @@ std::expected<WebSocketFrame, std::string> frame_parser(std::span<const std::byt
             pos += 4;
         }
 
-    if (pos + actual_payload_len > bytes.size()) {
+    if (actual_payload_len > bytes.size() - pos) {
         return std::unexpected("Frame too short: payload truncated");
     }
 

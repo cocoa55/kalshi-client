@@ -6,7 +6,7 @@
 
 class TcpSocket {
 private:
-    int _fd = 0;
+    int _fd = -1;
 
 public:
     [[nodiscard]] std::expected<int, std::string> connect (const std::string& host, const std::string& port);

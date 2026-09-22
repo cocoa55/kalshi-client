@@ -1,5 +1,5 @@
 #include "kalshi_auth.hpp"
-
+#include "openssl_util.hpp"
 #include <array>
 #include <cstdlib>
 #include <memory>
@@ -9,22 +9,17 @@
 #include <openssl/rsa.h>
 #include <openssl/err.h>
 
+
+
+
 namespace {
-
-std::string ssl_error_string() {
-    const unsigned long err = ERR_get_error();
-    std::array<char, 256> buf{};
-    ERR_error_string_n(err, buf.data(), buf.size());
-    return std::string{buf.data()};
+    std::string base64_encode(const std::vector<unsigned char>& data) {
+        std::vector<unsigned char> encoded(4 * ((data.size() + 2) / 3) + 1);
+        const int len = EVP_EncodeBlock(encoded.data(), data.data(), static_cast<int>(data.size()));
+        return std::string{reinterpret_cast<char*>(encoded.data()), static_cast<size_t>(len)};
+    }
 }
 
-std::string base64_encode(const std::vector<unsigned char>& data) {
-    std::vector<unsigned char> encoded(4 * ((data.size() + 2) / 3) + 1);
-    const int len = EVP_EncodeBlock(encoded.data(), data.data(), static_cast<int>(data.size()));
-    return std::string{reinterpret_cast<char*>(encoded.data()), static_cast<size_t>(len)};
-}
-
-}
 
 namespace kalshi_auth {
 

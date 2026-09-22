@@ -1,5 +1,5 @@
 #include "tcp_socket.hpp"
-
+#include "net_constants.hpp"
 #include <array>
 #include <cstring>
 #include <memory>
@@ -25,6 +25,7 @@ std::expected<int, std::string> TcpSocket::connect(const std::string& host, cons
 
         if (::connect(_fd, p->ai_addr, p->ai_addrlen) == -1) {
             close(_fd);
+            _fd = -1;
             continue;
         }
         return _fd;
@@ -44,7 +45,7 @@ std::expected<ssize_t, std::string> TcpSocket::send_data(const std::string& requ
 
 std::expected<std::string, std::string>  TcpSocket::receive_data() const {
 
-    std::array<char, 4096> buffer{};
+    std::array<char, kReceiveBufferSize> buffer{};
 
     ssize_t bytes = ::recv(_fd, buffer.data(), buffer.size(), 0);
     if (bytes == -1)

@@ -17,10 +17,10 @@ namespace {
 
 constexpr std::string_view kWebSocketPath = "/trade-api/ws/v2";
 
-std::string generate_websocket_key() {
+std::expected<std::string, std::string>generate_websocket_key() {
     std::array<unsigned char, 16> raw{};
     if (RAND_bytes(raw.data(), raw.size()) != 1) {
-        throw std::runtime_error("Failed to generate random bytes for WebSocket key");
+        return std::unexpected("Failed to generate random bytes for WebSocket key");
     }
 
     std::array<unsigned char, 25> encoded{};
@@ -57,7 +57,11 @@ std::expected<void, std::string> WebSocket::connect(const std::string &host, con
         return std::unexpected(std::format("TLS connection failed {}", tls_result.error()));
     }
 
-    const std::string websocket_key = generate_websocket_key();
+    auto websocket_key_result = generate_websocket_key();
+    if (!websocket_key_result.has_value()) {
+        return std::unexpected(websocket_key_result.error());
+    }
+    const std::string websocket_key = websocket_key_result.value();
 
     const std::string upgrade_request = std::format(
         "GET {} HTTP/1.1\r\n"
@@ -69,7 +73,7 @@ std::expected<void, std::string> WebSocket::connect(const std::string &host, con
         "KALSHI-ACCESS-KEY: {}\r\n"
         "KALSHI-ACCESS-TIMESTAMP: {}\r\n"
         "KALSHI-ACCESS-SIGNATURE: {}\r\n"
-        "\r\n", kWebSocketPath, host, websocket_key, credentials->key_id, timestamp, *signature);
+        "\r\n", kWebSocketPath, host, websocket_key_result.value(), credentials->key_id, timestamp, *signature);
 
     std::span<const std::byte> request_bytes{reinterpret_cast<const std::byte *>(upgrade_request.data()),
                                              upgrade_request.size()};

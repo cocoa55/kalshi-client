@@ -1,18 +1,8 @@
 #include "tls_socket.hpp"
-
+#include "net_constants.hpp"
 #include <array>
 #include <format>
-
-namespace {
-
-std::string ssl_error_string() {
-    const unsigned long err = ERR_get_error();
-    std::array<char, 256> buf{};
-    ERR_error_string_n(err, buf.data(), buf.size());
-    return std::string{buf.data()};
-}
-
-}
+#include "openssl_util.hpp"
 
 TlsSocket::TlsSocket() : _ctx(SSL_CTX_new(TLS_client_method())) {
     if (_ctx) {
@@ -63,7 +53,7 @@ std::expected<ssize_t, std::string> TlsSocket::send_data(std::span<const std::by
 
 std::expected<std::vector<std::byte>, std::string> TlsSocket::receive_data() const {
 
-    std::array<char, 4096> buffer{};
+    std::array<char, kReceiveBufferSize> buffer{};
     const int bytes = SSL_read(_ssl.get(), buffer.data(), static_cast<int>(buffer.size()));
     if (bytes <= 0) {
         return std::unexpected(std::format("SSL_read failed: {}", ssl_error_string()));

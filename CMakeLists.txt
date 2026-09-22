@@ -19,6 +19,8 @@ add_executable(kalshi-client main.cpp
         include/frame_parser.hpp
         src/protocol/frame_builder.cpp
         include/frame_builder.hpp
+        include/openssl_util.hpp
+        include/net_constants.hpp
 )
 target_include_directories(kalshi-client PRIVATE ${CMAKE_SOURCE_DIR}/include)
 find_package(OpenSSL REQUIRED)
