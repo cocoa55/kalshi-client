@@ -1,23 +1,23 @@
 #include "frame_parser.hpp"
 #include "web_socket_frame.hpp"
 #include <bit>
-
-std::expected<WebSocketFrame, std::string> frame_parser(std::span<const std::byte> bytes) {
+//TODO: ADD MEANINGFUL MESSAGES TO THE ERRORS
+std::expected<ParseResult, ParseError> frame_parser(std::span<const std::byte> bytes) {
     constexpr std::array<uint8_t, 6> valid_opcodes{0x0, 0x1, 0x2, 0x8, 0x9, 0xA};
 
         if (bytes.empty())
-            return std::unexpected("Frame too short: no bytes to parse");
+            return std::unexpected(ParseError{.kind = ParseError::Kind::Incomplete, .message = ""});
 
 
         if (bytes.size() < 2)
-             return std::unexpected("Frame too short: missing byte 1");
+             return std::unexpected(ParseError{.kind = ParseError::Kind::Incomplete, .message = ""});
 
 
         auto byte0 = bytes[0];
         bool fin = (byte0 & std::byte{0x80}) != std::byte{0};
         auto raw_opcode = static_cast<uint8_t>(byte0 & std::byte {0x0F});
         if (std::ranges::find(valid_opcodes, raw_opcode) == valid_opcodes.end()) {
-            return std::unexpected("Invalid opcode");
+            return std::unexpected(ParseError{.kind = ParseError::Kind::Malformed, .message = ""});
         }
         auto opcode = static_cast<WebSocketFrame::Opcode>(raw_opcode);
 
@@ -31,7 +31,7 @@ std::expected<WebSocketFrame, std::string> frame_parser(std::span<const std::byt
         switch (payload_len) {
             case 126: {
                 if (pos + 2 > bytes.size())
-                    return std::unexpected("Frame too short: missing extended length");
+                    return std::unexpected(ParseError{.kind = ParseError::Kind::Incomplete, .message = ""});
                 const auto extended = bytes.subspan(pos, 2 );
                 std::array<std::byte, 2> buf{};
                 std::ranges::copy(extended, buf.begin());
@@ -46,7 +46,7 @@ std::expected<WebSocketFrame, std::string> frame_parser(std::span<const std::byt
             }//read 2 bytes
             case 127: {
                 if (pos + 8 > bytes.size())
-                    return std::unexpected("Frame too short: missing extended 64-bit length");
+                    return std::unexpected(ParseError{.kind = ParseError::Kind::Incomplete, .message = ""});
                 const auto extended = bytes.subspan(pos, 8);
                 std::array<std::byte, 8> buf{};
                 std::ranges::copy(extended, buf.begin());
@@ -66,7 +66,7 @@ std::expected<WebSocketFrame, std::string> frame_parser(std::span<const std::byt
         std::optional<std::array<std::byte, 4>> mask_key;
         if (mask_bit) {
             if (pos + 4 > bytes.size()) {
-                return std::unexpected("Frame too short: missing masking key");
+                return std::unexpected(ParseError{.kind = ParseError::Kind::Incomplete, .message = ""});
             }
             std::array<std::byte , 4> raw_key{};
             std::ranges::copy(bytes.subspan(pos, 4), raw_key.begin());
@@ -74,9 +74,9 @@ std::expected<WebSocketFrame, std::string> frame_parser(std::span<const std::byt
             pos += 4;
         }
 
-    if (actual_payload_len > bytes.size() - pos) {
-        return std::unexpected("Frame too short: payload truncated");
-    }
+        if (actual_payload_len > bytes.size() - pos) {
+            return std::unexpected(ParseError{.kind = ParseError::Kind::Incomplete, .message = ""});
+        }
 
     auto payload_view = bytes.subspan(pos, actual_payload_len);
     std::vector<std::byte> payload(payload_view.begin(), payload_view.end());
@@ -87,10 +87,13 @@ std::expected<WebSocketFrame, std::string> frame_parser(std::span<const std::byt
             }
         }
 
-    return WebSocketFrame {
-            .fin_bit = fin,
-            .op_code = opcode,
-            .mask_key = mask_key,
-            .payload = std::move(payload)
+    return ParseResult {
+            .frame = WebSocketFrame {
+                .fin_bit = fin,
+                .op_code = opcode,
+                .mask_key = mask_key,
+                .payload = std::move(payload)
+            },
+            .bytes_consumed = pos + actual_payload_len
         };
 }

@@ -5,9 +5,7 @@
 #include <openssl/evp.h>
 #include <openssl/rand.h>
 #include <print>
-#include <stdexcept>
 #include <string_view>
-#include <sys/socket.h>
 #include "kalshi_auth.hpp"
 
 #include "frame_builder.hpp"
@@ -105,11 +103,23 @@ std::expected<void, std::string> WebSocket::connect(const std::string &host, con
 }
 
 std::expected<WebSocketFrame, std::string> WebSocket::receive_frame() {
-    auto raw_bytes = _tls_socket.receive_data();
-    if (!raw_bytes) {
-        return std::unexpected(raw_bytes.error());
+    while (true) {
+
+        auto result = frame_parser(_buffer); //parse whats in _buffer
+        if (result.has_value()) {
+            _buffer.erase(_buffer.begin(), _buffer.begin() + static_cast<std::ptrdiff_t>(result->bytes_consumed));
+            return result->frame;
+        }
+        if (result.error().kind == ParseError::Kind::Malformed) {
+            return std::unexpected(result.error().message);
+        }
+        //incomplete , read more bytes and append to _buffer
+        auto raw_bytes = _tls_socket.receive_data();
+        if (!raw_bytes.has_value()) {
+            return std::unexpected(raw_bytes.error());
+        }
+        _buffer.insert(_buffer.end(),raw_bytes->begin(), raw_bytes->end());
     }
-    return frame_parser(raw_bytes.value());
 }
 
 std::expected<void, std::string> WebSocket::send_frame(const WebSocketFrame& frame) {
