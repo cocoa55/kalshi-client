@@ -38,6 +38,20 @@ namespace {
         return std::nullopt;
     }
 
+    std::optional<int64_t> get_int64(const JsonObject &obj, const std::string &key) {
+        auto it = obj.find(key);
+        if (it == obj.end())
+            return std::nullopt;
+        auto res = std::get_if<std::string>(&it->second.data);
+        if (!res)
+            return std::nullopt;
+        try {
+            return std::stoll(*res);
+        } catch (...) {
+            return std::nullopt;
+        }
+    }
+
     std::expected<OrderBookDelta, std::string> parse_delta(const JsonObject &msg_obj) {
         auto ticker = get_string(msg_obj, "market_ticker");
         auto market_id = get_string(msg_obj, "market_id");
@@ -45,8 +59,9 @@ namespace {
         auto delta_fp = get_string(msg_obj, "delta_fp");
         auto side = get_string(msg_obj, "side");
         auto ts = get_string(msg_obj, "ts");
+        auto ts_ms = get_int64(msg_obj, "ts_ms");
 
-        if (!ticker || !market_id || !price_dollars || !delta_fp || !side || !ts) {
+        if (!ticker || !market_id || !price_dollars || !delta_fp || !side || !ts || !ts_ms) {
             return std::unexpected("Invalid Key");
         }
 
@@ -55,7 +70,8 @@ namespace {
                               .price_dollars = *price_dollars,
                               .delta_fp = *delta_fp,
                               .side = *side,
-                              .ts = *ts};
+                              .ts = *ts,
+                              .ts_ms = *ts_ms};
     }
 
     std::expected<std::vector<PriceLevel>, std::string> parse_price_levels(const JsonArray &json_array) {
@@ -83,24 +99,30 @@ namespace {
         auto ticker = get_string(msg_obj, "market_ticker");
         auto market_id = get_string(msg_obj, "market_id");
 
+        if (!ticker || !market_id ) {
+            return std::unexpected("Missing required fields in snapshot");
+        }
+        std::vector<PriceLevel> yes_levels;
+        std::vector<PriceLevel> no_levels;
+
         auto yes_arr = get_array(msg_obj, "yes_dollars_fp");
         auto no_arr = get_array(msg_obj, "no_dollars_fp");
 
-        if (!ticker || !market_id || !yes_arr || !no_arr)
-            return std::unexpected("Missing required fields in snapshot");
-
-        auto yes_levels = parse_price_levels(yes_arr.value());
-        auto no_levels = parse_price_levels(no_arr.value());
-
-        if (!yes_levels)
-            return std::unexpected(yes_levels.error());
-        if (!no_levels)
-            return std::unexpected(no_levels.error());
+        if (yes_arr) {
+            auto result = parse_price_levels(yes_arr->get());
+            if (!result) return std::unexpected(result.error());
+            yes_levels = std::move(result.value());
+        }
+        if (no_arr) {
+            auto result = parse_price_levels(no_arr->get());
+            if (!result) return std::unexpected(result.error());
+            no_levels = std::move(result.value());
+        }
 
         return OrderBookSnapshot{.market_ticker = *ticker,
                                  .market_id = *market_id,
-                                 .yes_dollars_fp = std::move(yes_levels.value()),
-                                 .no_dollars_fp = std::move(no_levels.value())};
+                                 .yes_dollars_fp = std::move(yes_levels),
+                                 .no_dollars_fp = std::move(no_levels)};
     }
 } // namespace
 
@@ -136,6 +158,13 @@ std::expected<Message, std::string> parse_kalshi_message(const JsonValue &json) 
             return std::unexpected(snapshot_result.error());
 
         return Message{.type = *msg_type, .sid = 0, .seq = 0, .msg = std::move(snapshot_result.value())};
+    } else if (*msg_type == "subscribed") {
+        return Message {
+            .type = *msg_type,
+            .sid = 0,
+            .seq = 0,
+            .msg = std::monostate{}
+        };
     } else {
         return std::unexpected("Unknown message type: " + *msg_type);
     }

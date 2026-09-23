@@ -33,7 +33,7 @@ struct Message {
     const std::string type;
     const uint32_t sid{};
     const uint32_t seq{};
-    std::variant<OrderBookSnapshot, OrderBookDelta> msg;
+    std::variant<std::monostate, OrderBookSnapshot, OrderBookDelta> msg;
 };
 
 std::expected<Message, std::string> parse_kalshi_message(const JsonValue &json);

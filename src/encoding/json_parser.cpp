@@ -63,7 +63,7 @@ namespace {
             if (!value.has_value()) {
                 return std::unexpected(value.error());
             }
-            object.insert({key, std::move(value.value())});
+            object.emplace(std::move(key), std::move(value.value()));
             if (pos < tokens.size()) {
                 if (tokens[pos].type == TokenType::Comma) {
                     ++pos;

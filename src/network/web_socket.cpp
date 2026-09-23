@@ -136,3 +136,13 @@ auto out_going_frame = frame_builder(frame);
 
     return {};
 }
+
+std::expected<void, std::string> WebSocket::send_pong(const WebSocketFrame& ping_frame) {
+    WebSocketFrame pong_frame{.fin_bit = true,
+                                     .op_code = WebSocketFrame::Opcode::Pong,
+                                     .mask_key = std::nullopt,
+                                     .payload = ping_frame.payload};
+    return send_frame(pong_frame);
+}
+//std::expected<void, std::string> send_ping()
+
