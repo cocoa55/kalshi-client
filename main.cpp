@@ -46,7 +46,7 @@ int main() {
     if (frame_received->op_code == WebSocketFrame::Opcode::Ping) { // we received a ping
         auto pong_result = ws.send_pong(frame_received.value());
         if (!pong_result.has_value()) {
-            std::println(stderr, "Failed to sendframe: {}", pong_result.error());
+            std::println(stderr, "Failed to send frame: {}", pong_result.error());
             return 1;
         }
         std::println("Sent Pong.");

@@ -2,15 +2,14 @@
 #include <expected>
 #include <span>
 #include <string>
-#include <unordered_map>
 #include <variant>
 #include <vector>
-
+#include <flat_map>
 
 struct Token;
 struct JsonValue;
 
-using JsonObject = std::unordered_map<std::string, JsonValue>;
+using JsonObject = std::flat_map<std::string, JsonValue>;
 using JsonArray = std::vector<JsonValue>;
 
 
