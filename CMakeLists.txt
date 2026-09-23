@@ -22,6 +22,13 @@ add_executable(kalshi-client main.cpp
         include/openssl_util.hpp
         include/net_constants.hpp
         include/parse_error.hpp
+        include/kalshi_messages.hpp
+        src/encoding/json_lexer.cpp
+        include/json_lexer.hpp
+        src/encoding/json_parser.cpp
+        include/json_parser.hpp
+        include/json_parser.hpp
+        src/protocol/kalshi_messages.cpp
 )
 target_include_directories(kalshi-client PRIVATE ${CMAKE_SOURCE_DIR}/include)
 find_package(OpenSSL REQUIRED)
