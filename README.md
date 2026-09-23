@@ -5,12 +5,13 @@ A C++23 client for Kalshi's trading API, built from scratch (raw POSIX sockets, 
 ## What it does at the moment
 
 Connects to Kalshi's WebSocket API, performs a TLS handshake, upgrades to WebSocket, parses incoming frames, and responds to server pings with pongs. Built from scratch using raw POSIX sockets and OpenSSL with no external networking or parsing libraries.
+Parses Kalshi's market data into C++ structs aswell as Kalshi message deserialization.
 
 ## Status
 
 - [x] Phase 1: TLS connection and WebSocket handshake
 - [x] Phase 2: WebSocket frame parser and builder
-- [ ] Phase 3: JSON parser
+- [x] Phase 3: JSON parser
 - [ ] Phase 4: REST order management
 - [ ] Phase 5: Order management system
 - [ ] Phase 6: Trading logic
@@ -76,8 +77,17 @@ kalshi-client/
 │   ├── web_socket_frame.hpp
 │   ├── frame_parser.hpp
 │   ├── frame_builder.hpp
-│   └── kalshi_auth.hpp
+│   ├── kalshi_auth.hpp  
+│   ├── json_parser.hpp 
+│   ├── json_lexer.hpp
+│   ├── openssl_util.hpp
+│   ├── kalshi_messages.hpp
+│   ├── net_constants.hpp
+│   └── parse_error.hpp
 ├── src/
+│   ├── encoding/
+│   │   ├── json_lexer.cpp
+│   │   └── json_parser.cpp
 │   ├── network/
 │   │   ├── tcp_socket.cpp
 │   │   ├── tls_socket.cpp
@@ -85,6 +95,7 @@ kalshi-client/
 │   └── protocol/
 │       ├── frame_parser.cpp
 │       ├── frame_builder.cpp
+│       ├── kalshi_messages.cpp
 │       └── kalshi_auth.cpp
 └── tests/
 ```
