@@ -1,4 +1,7 @@
 #include "kalshi_messages.hpp"
+
+#include <algorithm>
+#include <format>
 #include <functional>
 #include <optional>
 
@@ -15,6 +18,29 @@ namespace {
         }
         return std::nullopt;
     }
+    std::string_view to_string(const OrderSide side) {
+            switch (side) {
+                case OrderSide::Bid: return "bid";
+                case OrderSide::Ask: return "ask";
+                default: std::unreachable();
+            }
+    }
+    std::string_view to_string(const TimeInForce tif) {
+            switch (tif) {
+                case TimeInForce::FillOrKill: return "fill_or_kill";
+                case TimeInForce::GoodTillCanceled: return "good_till_canceled";
+                case TimeInForce::ImmediateOrCancel: return "immediate_or_cancel";
+                default: std::unreachable();
+            }
+    }
+    std::string_view to_string(const SelfTradePrevention stp) {
+            switch (stp) {
+                case SelfTradePrevention::Maker: return "maker";
+                case SelfTradePrevention::TakerAtCross: return "taker_at_cross";
+                default: std::unreachable();
+            }
+    }
+
     std::optional<std::reference_wrapper<const JsonObject>> get_object(const JsonObject &obj, const std::string &key) {
         auto it = obj.find(key);
         if (it == obj.end())
@@ -38,7 +64,7 @@ namespace {
         return std::nullopt;
     }
 
-    std::optional<int64_t> get_int64(const JsonObject &obj, const std::string &key) {
+    std::optional<uint64_t> get_uint64(const JsonObject &obj, const std::string &key) {
         auto it = obj.find(key);
         if (it == obj.end())
             return std::nullopt;
@@ -59,7 +85,7 @@ namespace {
         auto delta_fp = get_string(msg_obj, "delta_fp");
         auto side = get_string(msg_obj, "side");
         auto ts = get_string(msg_obj, "ts");
-        auto ts_ms = get_int64(msg_obj, "ts_ms");
+        auto ts_ms = get_uint64(msg_obj, "ts_ms");
 
         if (!ticker || !market_id || !price_dollars || !delta_fp || !side || !ts || !ts_ms) {
             return std::unexpected("Invalid Key");
@@ -168,4 +194,43 @@ std::expected<Message, std::string> parse_kalshi_message(const JsonValue &json) 
     } else {
         return std::unexpected("Unknown message type: " + *msg_type);
     }
+}
+
+std::expected<OrderResponse, std::string> parse_order_response(const JsonValue& json) {
+    auto root_obj_ptr = std::get_if<JsonObject>(&json.data);
+    if (!root_obj_ptr) return std::unexpected("Root JSON is not an object");
+    const JsonObject &root_obj = *root_obj_ptr;
+
+    auto order_id = get_string(root_obj, "order_id");
+    auto fill_count = get_string(root_obj, "fill_count");
+    auto remaining_count = get_string(root_obj, "remaining_count");
+    auto ts_ms = get_uint64(root_obj, "ts_ms");
+    auto client_order_id = get_string(root_obj, "client_order_id");
+
+    if (!order_id || !fill_count || !remaining_count || !ts_ms) return std::unexpected("Missing fields in order response");
+
+
+    return OrderResponse {
+        .order_id = std::move(*order_id),
+        .fill_count = std::move(*fill_count),
+        .remaining_count = std::move(*remaining_count),
+        .ts_ms = *ts_ms,
+        .client_order_id = client_order_id ? std::move(*client_order_id) : std::string{}
+
+    };
+}
+
+
+std::string serialize_order_request(const OrderRequest &order) {
+    return std::format(
+    R"({{"ticker":"{}","side":"{}","count":"{}","price":"{}","time_in_force":"{}","self_trade_prevention_type":"{}","post_only":{},"client_order_id":"{}"}})",
+    order.ticker,
+    to_string(order.side),
+    order.count,
+    order.price,
+    to_string(order.time_in_force),
+    to_string(order.self_trade_prevention),
+    order.post_only ? "true" : "false",
+    order.client_order_id
+    );
 }

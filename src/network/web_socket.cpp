@@ -10,6 +10,7 @@
 
 #include "frame_builder.hpp"
 #include "frame_parser.hpp"
+#include "time_util.hpp"
 
 namespace {
 
@@ -25,12 +26,6 @@ std::expected<std::string, std::string>generate_websocket_key() {
     const int len = EVP_EncodeBlock(encoded.data(), raw.data(), raw.size());
 
     return std::string{reinterpret_cast<char*>(encoded.data()), static_cast<size_t>(len)};
-}
-
-std::string current_timestamp_ms() {
-    const auto now = std::chrono::system_clock::now();
-    const auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch());
-    return std::to_string(ms.count());
 }
 
 }
@@ -144,5 +139,5 @@ std::expected<void, std::string> WebSocket::send_pong(const WebSocketFrame& ping
                                      .payload = ping_frame.payload};
     return send_frame(pong_frame);
 }
-//std::expected<void, std::string> send_ping()
+//std::expected<void, std::string> send_ping() TODO :
 

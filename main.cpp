@@ -2,10 +2,13 @@
 #include <cstdio>
 #include <print>
 
+#include "http_client.hpp"
 #include "include/web_socket.hpp"
 #include "json_lexer.hpp"
 #include "json_parser.hpp"
+#include "kalshi_auth.hpp"
 #include "kalshi_messages.hpp"
+#include "net_constants.hpp"
 
 int main() {
     WebSocket ws;
@@ -57,7 +60,7 @@ int main() {
     "cmd": "subscribe",
     "params": {
         "channels": ["orderbook_delta"],
-        "market_ticker": "KXMLB-26"
+        "market_ticker": "KXPRESNOMD-28-LC"
     }
 })";
 
@@ -115,6 +118,38 @@ int main() {
                      data_frame->payload.size());
     }
 
+    auto credentials = kalshi_auth::load_credentials_from_env();
+    if (!credentials.has_value()) {
+        std::println(stderr, "Failed to load credentials: {}", credentials.error());
+        return 1;
+    }
+    OrderRequest order {
+        .ticker =  "KXPRESNOMD-28-LC",
+        .side = OrderSide::Bid,
+        .count = "1.00",
+        .price = "0.10",
+        .time_in_force = TimeInForce::GoodTillCanceled,
+        .self_trade_prevention = SelfTradePrevention::TakerAtCross,
+        .client_order_id = "test-order-002",
+        .post_only = false
+    };
+
+    std::string body = serialize_order_request(order);
+    auto response = http_post(kKalshiHost, kOrdersPath, body, *credentials);
+    if (!response.has_value()) {
+        std::println(stderr, "Order failed: {}", response.error());
+        return 1;
+    }
+    std::println("Order submitted successfully.");
+
+    auto parsed = parse_order_response(*response);
+    if (!parsed.has_value()) {
+        std::println(stderr, "Failed to parse response: {}", parsed.error());
+        return 1;
+    }
+    std::println("Order ID: {}", parsed->order_id);
+    std::println("Fill count: {}", parsed->fill_count);
+    std::println("Remaining: {}", parsed->remaining_count);
 
     return 0;
 }

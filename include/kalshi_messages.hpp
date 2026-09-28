@@ -25,7 +25,7 @@ struct OrderBookDelta {
     const std::string delta_fp;
     const std::string side;
     const std::string ts;
-    const int64_t ts_ms {};
+    const uint64_t ts_ms {};
 };
 
 
@@ -36,4 +36,31 @@ struct Message {
     std::variant<std::monostate, OrderBookSnapshot, OrderBookDelta> msg;
 };
 
+enum class OrderSide { Bid, Ask };
+enum class TimeInForce { FillOrKill, GoodTillCanceled, ImmediateOrCancel };
+enum class SelfTradePrevention { TakerAtCross, Maker };
+
+struct OrderRequest {
+    std::string ticker;
+    OrderSide side;
+    std::string count;
+    std::string price;
+    TimeInForce time_in_force;
+    SelfTradePrevention self_trade_prevention;
+    std::string client_order_id;
+    bool post_only{false};
+};
+
+struct OrderResponse {
+    std::string order_id;
+    std::string fill_count;
+    std::string remaining_count;
+    uint64_t ts_ms;
+    std::string client_order_id;
+};
+
+
+
 std::expected<Message, std::string> parse_kalshi_message(const JsonValue &json);
+std::string serialize_order_request(const OrderRequest& order);
+std::expected<OrderResponse, std::string> parse_order_response(const JsonValue& json);
