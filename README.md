@@ -76,13 +76,18 @@ kalshi-client/
 │   ├── web_socket_frame.hpp
 │   ├── frame_parser.hpp
 │   ├── frame_builder.hpp
-│   ├── kalshi_auth.hpp  
-│   ├── json_parser.hpp 
+│   ├── kalshi_auth.hpp
+│   ├── json_parser.hpp
 │   ├── json_lexer.hpp
 │   ├── openssl_util.hpp
 │   ├── kalshi_messages.hpp
 │   ├── net_constants.hpp
-│   └── parse_error.hpp
+│   ├── parse_error.hpp
+│   ├── http_client.hpp
+│   ├── time_util.hpp
+│   ├── market_state.hpp
+│   ├── order_tracker.hpp
+│   └── position_tracker.hpp
 ├── src/
 │   ├── encoding/
 │   │   ├── json_lexer.cpp
@@ -91,10 +96,13 @@ kalshi-client/
 │   │   ├── tcp_socket.cpp
 │   │   ├── tls_socket.cpp
 │   │   └── web_socket.cpp
-│   └── protocol/
-│       ├── frame_parser.cpp
-│       ├── frame_builder.cpp
-│       ├── kalshi_messages.cpp
-│       └── kalshi_auth.cpp
+│   ├── protocol/
+│   │   ├── frame_parser.cpp
+│   │   ├── frame_builder.cpp
+│   │   ├── kalshi_messages.cpp
+│   │   └── kalshi_auth.cpp
+│   └── trading/
+│       ├── market_state.cpp
+│       └── http_client.cpp
 └── tests/
 ```
