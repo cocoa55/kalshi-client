@@ -1,6 +1,7 @@
 
 #include <cstdio>
 #include <print>
+#include <iostream>
 
 #include "http_client.hpp"
 #include "include/web_socket.hpp"
@@ -8,7 +9,9 @@
 #include "json_parser.hpp"
 #include "kalshi_auth.hpp"
 #include "kalshi_messages.hpp"
+#include "market_state.hpp"
 #include "net_constants.hpp"
+#include "time_util.hpp"
 
 int main() {
     WebSocket ws;
@@ -80,6 +83,7 @@ int main() {
     }
     std::println("Sent subscribe message.");
 
+    MarketState state;
     for (int i{}; i < 2; ++i) {
         auto data_frame = ws.receive_frame();
         if (!data_frame.has_value()) {
@@ -112,12 +116,25 @@ int main() {
                 std::println(stderr, "Deserializer error: {}", message.error());
                 continue;
             }
+            if (message->type == "orderbook_snapshot") {
+                auto& snapshot = std::get<OrderBookSnapshot>(message->msg);
+                state.apply_snapshot(snapshot);
+                std::println("Snapshot applied. Yes levels: {}, No levels: {}",
+                    state.yes().size(), state.no().size());
+            }
+            else if (message->type == "orderbook_delta") {
+                auto& delta = std::get<OrderBookDelta>(message->msg);
+                state.apply_delta(delta);
+                std::println("Delta applied. Yes levels: {}, No levels: {}",
+                    state.yes().size(), state.no().size());
+            }
             std::println("Parsed message type: {}", message->type);
         }
         std::println("Received frame - opcode: {}, payload size: {}", static_cast<uint8_t>(data_frame->op_code),
                      data_frame->payload.size());
     }
-
+    std::println("Loop exited.");
+    
     auto credentials = kalshi_auth::load_credentials_from_env();
     if (!credentials.has_value()) {
         std::println(stderr, "Failed to load credentials: {}", credentials.error());
@@ -130,7 +147,7 @@ int main() {
         .price = "0.10",
         .time_in_force = TimeInForce::GoodTillCanceled,
         .self_trade_prevention = SelfTradePrevention::TakerAtCross,
-        .client_order_id = "test-order-002",
+        .client_order_id = "test-order-009",
         .post_only = false
     };
 

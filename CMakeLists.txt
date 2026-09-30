@@ -31,6 +31,8 @@ add_executable(kalshi-client main.cpp
         src/protocol/kalshi_messages.cpp
         include/http_client.hpp
         include/time_util.hpp
+        include/market_state.hpp
+        src/trading/market_state.cpp
 )
 target_include_directories(kalshi-client PRIVATE ${CMAKE_SOURCE_DIR}/include)
 find_package(OpenSSL REQUIRED)
