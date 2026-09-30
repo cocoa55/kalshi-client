@@ -12,7 +12,6 @@ Built from scratch using raw POSIX sockets and OpenSSL with no external networki
 =======
 Connects to Kalshi's WebSocket API, performs a TLS handshake, upgrades to WebSocket, parses incoming frames, and responds to server pings with pongs. Built from scratch using raw POSIX sockets and OpenSSL with no external networking or parsing libraries.
 Parses incoming JSON market data into C++ structs using a custom lexer and parser. Tracks market state, manages orders, and updates positions on fills.
->>>>>>> 39472dd (updated README.md)
 
 ## Status
 
@@ -20,11 +19,7 @@ Parses incoming JSON market data into C++ structs using a custom lexer and parse
 - [x] Phase 2: WebSocket frame parser and builder
 - [x] Phase 3: JSON parser
 - [x] Phase 4: REST order management
-<<<<<<< HEAD
-- [ ] Phase 5: Order management system
-=======
 - [x] Phase 5: Order management system
->>>>>>> 39472dd (updated README.md)
 - [ ] Phase 6: Trading logic
 
 ## Prerequisites
