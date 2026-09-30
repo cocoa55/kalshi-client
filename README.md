@@ -3,13 +3,6 @@
 A C++23 client for Kalshi's trading API, built from scratch (raw POSIX sockets, OpenSSL for TLS, no networking libraries) as a learning project.
 
 ## What it does at the moment
-
-<<<<<<< HEAD
-Connects to Kalshi's WebSocket API, performs a TLS handshake, upgrades to WebSocket, parses incoming frames, and responds to server pings with pongs,
-subscribes to market data channels, parses incoming JSON market data into custom typed C++ structs, and submits and receives orders via REST api.
-Built from scratch using raw POSIX sockets and OpenSSL with no external networking or parsing libraries.
-
-=======
 Connects to Kalshi's WebSocket API, performs a TLS handshake, upgrades to WebSocket, parses incoming frames, and responds to server pings with pongs. Built from scratch using raw POSIX sockets and OpenSSL with no external networking or parsing libraries.
 Parses incoming JSON market data into C++ structs using a custom lexer and parser. Tracks market state, manages orders, and updates positions on fills.
 
