@@ -16,8 +16,6 @@ struct OrderBookSnapshot {
     const std::vector<PriceLevel> no_dollars_fp;
 };
 
-
-
 struct OrderBookDelta {
     const std::string market_ticker;
     const std::string market_id;
@@ -28,12 +26,25 @@ struct OrderBookDelta {
     const uint64_t ts_ms {};
 };
 
+enum class FillAction {
+    Buy,
+    Sell
+};
+
+struct Fill {
+    const std::string order_id;
+    const std::string market_ticker;
+    const std::string count_fp;
+    const FillAction action;
+};
+
+
 
 struct Message {
     const std::string type;
     const uint32_t sid{};
     const uint32_t seq{};
-    std::variant<std::monostate, OrderBookSnapshot, OrderBookDelta> msg;
+    std::variant<std::monostate, OrderBookSnapshot, OrderBookDelta, Fill> msg;
 };
 
 enum class OrderSide { Bid, Ask };
@@ -58,8 +69,6 @@ struct OrderResponse {
     uint64_t ts_ms;
     std::string client_order_id;
 };
-
-
 
 std::expected<Message, std::string> parse_kalshi_message(const JsonValue &json);
 std::string serialize_order_request(const OrderRequest& order);

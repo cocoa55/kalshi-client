@@ -11,6 +11,8 @@
 #include "kalshi_messages.hpp"
 #include "market_state.hpp"
 #include "net_constants.hpp"
+#include "order_tracker.hpp"
+#include "position_tracker.hpp"
 #include "time_util.hpp"
 
 int main() {
@@ -84,6 +86,9 @@ int main() {
     std::println("Sent subscribe message.");
 
     MarketState state;
+    OrderTracker order_tracker;
+    PositionTracker position_tracker;
+
     for (int i{}; i < 2; ++i) {
         auto data_frame = ws.receive_frame();
         if (!data_frame.has_value()) {
@@ -128,6 +133,22 @@ int main() {
                 std::println("Delta applied. Yes levels: {}, No levels: {}",
                     state.yes().size(), state.no().size());
             }
+            else if (message->type == "fill") {
+                auto& fill = std::get<Fill>(message->msg);
+                order_tracker.update_status(fill.order_id, OrderStatus::Filled);
+                int64_t quantity = static_cast<int64_t>(std::stod(fill.count_fp));
+                if (fill.action == FillAction::Buy) {
+                    position_tracker.update_positions(fill.market_ticker, quantity);
+                } else {
+                    position_tracker.update_positions(fill.market_ticker, -quantity);
+                }
+                std::println("Fill received. Order: {}, Position in {}: {}",
+                fill.order_id,
+                fill.market_ticker,
+                position_tracker.get_position(fill.market_ticker));
+            }
+
+
             std::println("Parsed message type: {}", message->type);
         }
         std::println("Received frame - opcode: {}, payload size: {}", static_cast<uint8_t>(data_frame->op_code),

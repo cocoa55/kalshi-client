@@ -150,6 +150,47 @@ namespace {
                                  .yes_dollars_fp = std::move(yes_levels),
                                  .no_dollars_fp = std::move(no_levels)};
     }
+    std::expected<Fill, std::string> parse_fill(const JsonValue& json) {
+
+        auto root_obj_ptr = std::get_if<JsonObject>(&json.data);
+        if (!root_obj_ptr)
+            return std::unexpected("Root JSON is not an object");
+
+        const JsonObject &root_obj = *root_obj_ptr;
+        auto msg_type = get_string(root_obj, "type");
+        if (!msg_type)
+            return std::unexpected("Missing or invalid 'type' field");
+
+        auto msg_obj_ptr = get_object(root_obj, "msg");
+        if (!msg_obj_ptr)
+            return std::unexpected("Missing 'msg' object in Kalshi message");
+
+        const JsonObject &msg_obj = msg_obj_ptr->get();
+
+        const auto order_id = get_string(msg_obj, "order_id");
+        const auto market_ticker = get_string(msg_obj, "market_ticker");
+        const auto count_fp = get_string(msg_obj, "count_fp");
+
+        auto action_str = get_string(msg_obj, "action");
+        if (!action_str)
+            return std::unexpected("Missing action field");
+
+        FillAction action;
+        if (*action_str == "buy") action = FillAction::Buy;
+        else if (*action_str == "sell") action = FillAction::Sell;
+        else return std::unexpected("Unknown action: " + *action_str);
+
+        if (!order_id || !market_ticker || !count_fp)
+            return std::unexpected("Missing fields in order response");
+
+
+        return Fill{
+            .order_id = *order_id,
+            .market_ticker = *market_ticker,
+            .count_fp = *count_fp,
+            .action = action
+        };
+    }
 } // namespace
 
 
@@ -190,6 +231,16 @@ std::expected<Message, std::string> parse_kalshi_message(const JsonValue &json) 
             .sid = 0,
             .seq = 0,
             .msg = std::monostate{}
+        };
+    } else if (*msg_type == "fill") {
+        auto fill_result = parse_fill(json);
+        if (!fill_result)
+            return std::unexpected(fill_result.error());
+        return Message{
+            .type = *msg_type,
+            .sid = 0,
+            .seq = 0,
+            .msg = std::move(fill_result.value())
         };
     } else {
         return std::unexpected("Unknown message type: " + *msg_type);
