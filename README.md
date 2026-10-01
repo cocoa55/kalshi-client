@@ -61,15 +61,6 @@ cmake -S . -B cmake-build-release -DCMAKE_BUILD_TYPE=Release && cmake --build cm
 ./cmake-build-release/benchmarks --network
 ```
 
-## Status
-
-- [x] Phase 1: TLS connection and WebSocket handshake
-- [x] Phase 2: WebSocket frame parser and builder
-- [x] Phase 3: JSON parser
-- [x] Phase 4: REST order management
-- [x] Phase 5: Order management system
-- [x] Phase 6: Trading logic
-- [x] Phase 7: Performance, testing and hardening
 
 ## The strategy
 
