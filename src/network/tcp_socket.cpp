@@ -3,10 +3,36 @@
 #include <array>
 #include <cstring>
 #include <memory>
+#include <fcntl.h>
 #include <netdb.h>
+#include <netinet/in.h>
+#include <netinet/tcp.h>
+#include <poll.h>
 #include <sys/socket.h>
 #include <sys/time.h>
 #include <unistd.h>
+
+namespace {
+    // Non-blocking connect + poll gives connect() a deadline, then restores blocking mode.
+    bool connect_with_timeout(const int fd, const sockaddr *addr, const socklen_t len) {
+        const int flags = fcntl(fd, F_GETFL, 0);
+        if (flags == -1 || fcntl(fd, F_SETFL, flags | O_NONBLOCK) == -1)
+            return false;
+
+        if (::connect(fd, addr, len) == -1) {
+            if (errno != EINPROGRESS)
+                return false;
+            pollfd pfd{.fd = fd, .events = POLLOUT, .revents = 0};
+            if (poll(&pfd, 1, kConnectTimeoutMs) != 1)
+                return false; // timed out or poll error
+            int so_error = 0;
+            socklen_t so_len = sizeof(so_error);
+            if (getsockopt(fd, SOL_SOCKET, SO_ERROR, &so_error, &so_len) == -1 || so_error != 0)
+                return false;
+        }
+        return fcntl(fd, F_SETFL, flags) != -1;
+    }
+} // namespace
 
 TcpSocket::~TcpSocket() {
     if (_fd != -1)
@@ -23,7 +49,9 @@ TcpSocket& TcpSocket::operator=(TcpSocket&& other) noexcept {
 }
 
 std::expected<int, std::string> TcpSocket::connect(const std::string& host, const std::string& port) {
-    addrinfo hints{.ai_family = AF_UNSPEC, .ai_socktype = SOCK_STREAM};
+    addrinfo hints{};
+    hints.ai_family = AF_UNSPEC;
+    hints.ai_socktype = SOCK_STREAM;
     addrinfo* res_raw {nullptr};
 
     int result {getaddrinfo(host.c_str(), port.c_str(), &hints, &res_raw)};
@@ -38,11 +66,15 @@ std::expected<int, std::string> TcpSocket::connect(const std::string& host, cons
         _fd = socket(p->ai_family, p->ai_socktype, p->ai_protocol);
         if (_fd == -1) continue;
 
-        if (::connect(_fd, p->ai_addr, p->ai_addrlen) == -1) {
+        if (!connect_with_timeout(_fd, p->ai_addr, p->ai_addrlen)) {
             close(_fd);
             _fd = -1;
             continue;
         }
+        // Orders and pongs are small writes that must go out immediately; don't let Nagle's
+        // algorithm hold them back waiting for an ACK.
+        const int one = 1;
+        setsockopt(_fd, IPPROTO_TCP, TCP_NODELAY, &one, sizeof(one));
         // Without a timeout a silently dropped connection blocks recv/SSL_read forever.
         // Kalshi pings every ~10s, so 30s of silence means the connection is dead.
         timeval timeout{.tv_sec = kReceiveTimeoutSeconds, .tv_usec = 0};

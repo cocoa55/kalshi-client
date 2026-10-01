@@ -4,8 +4,7 @@
 
 #include "kalshi_messages.hpp"
 #include "market_state.hpp"
-
-using Clock = std::chrono::steady_clock;
+#include "time_util.hpp"
 
 struct StrategyConfig {
     std::chrono::seconds ema_time_constant{60}; // how quickly "fair value" adapts

@@ -12,10 +12,10 @@
 class TlsSocket {
 private:
     struct SslCtxDeleter {
-        void operator()(SSL_CTX* ctx) const noexcept { SSL_CTX_free(ctx); }
+        static void operator()(SSL_CTX* ctx) noexcept { SSL_CTX_free(ctx); }
     };
     struct SslDeleter {
-        void operator()(SSL* ssl) const noexcept { SSL_shutdown(ssl); SSL_free(ssl); }
+        static void operator()(SSL* ssl) noexcept { SSL_shutdown(ssl); SSL_free(ssl); }
     };
 
     TcpSocket _tcp_socket {};
@@ -26,6 +26,8 @@ public:
     TlsSocket();
 
     [[nodiscard]] std::expected<void, std::string> connect(const std::string& host, const std::string& port);
+
+    int fd() const { return _tcp_socket.fd(); }
 
     [[nodiscard]] std::expected<ssize_t, std::string> send_data(std::span<const std::byte> data) const;
     [[nodiscard]] std::expected<std::vector<std::byte>,std::string>receive_data() const;

@@ -1,4 +1,5 @@
 #include "frame_parser.hpp"
+#include <algorithm>
 #include <bit>
 #include <format>
 #include "web_socket_frame.hpp"
@@ -18,12 +19,17 @@ std::expected<ParseResult, ParseError> frame_parser(std::span<const std::byte> b
     auto byte0 = bytes[0];
     bool fin = (byte0 & std::byte{0x80}) != std::byte{0};
     auto raw_opcode = static_cast<uint8_t>(byte0 & std::byte{0x0F});
-    if (std::ranges::find(valid_opcodes, raw_opcode) == valid_opcodes.end()) {
+    if (!std::ranges::contains(valid_opcodes, raw_opcode)) {
         return std::unexpected(
                 ParseError{.kind = ParseError::Kind::Malformed,
                            .message = std::format("Malformed frame: unrecognized opcode {:#04x}", raw_opcode)});
     }
     auto opcode = static_cast<WebSocketFrame::Opcode>(raw_opcode);
+    // RSV1-3 must be zero unless an extension was negotiated, and we negotiate none.
+    if ((byte0 & std::byte{0x70}) != std::byte{0}) {
+        return std::unexpected(ParseError{.kind = ParseError::Kind::Malformed,
+                                          .message = "Malformed frame: reserved bits set"});
+    }
 
     auto byte1 = bytes[1];
     bool mask_bit = (byte1 & std::byte{0x80}) != std::byte{0};
@@ -62,6 +68,10 @@ std::expected<ParseResult, ParseError> frame_parser(std::span<const std::byte> b
             if (std::endian::native != std::endian::big) {
                 len = std::byteswap(len);
             }
+            if (len >> 63) { // RFC 6455: the most significant bit must be 0
+                return std::unexpected(ParseError{.kind = ParseError::Kind::Malformed,
+                                                  .message = "Malformed frame: 64-bit length has MSB set"});
+            }
             actual_payload_len = len;
             pos += 8;
             break;
@@ -69,6 +79,17 @@ std::expected<ParseResult, ParseError> frame_parser(std::span<const std::byte> b
         default:
             actual_payload_len = payload_len;
             break;
+    }
+
+    // Control frames (close/ping/pong) must be unfragmented with payloads of at most 125 bytes.
+    if (raw_opcode >= 0x8 && (!fin || actual_payload_len > 125)) {
+        return std::unexpected(ParseError{.kind = ParseError::Kind::Malformed,
+                                          .message = "Malformed frame: invalid control frame"});
+    }
+    if (actual_payload_len > kMaxFramePayload) {
+        return std::unexpected(ParseError{
+                .kind = ParseError::Kind::Malformed,
+                .message = std::format("Frame payload of {} bytes exceeds limit", actual_payload_len)});
     }
 
     std::optional<std::array<std::byte, 4>> mask_key;

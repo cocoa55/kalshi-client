@@ -3,7 +3,9 @@
 #include <array>
 #include <cstdlib>
 #include <memory>
+#include <format>
 #include <vector>
+#include "time_util.hpp"
 #include <openssl/pem.h>
 #include <openssl/evp.h>
 #include <openssl/rsa.h>
@@ -14,9 +16,13 @@
 
 namespace {
     std::string base64_encode(const std::vector<unsigned char>& data) {
-        std::vector<unsigned char> encoded(4 * ((data.size() + 2) / 3) + 1);
-        const int len = EVP_EncodeBlock(encoded.data(), data.data(), static_cast<int>(data.size()));
-        return std::string{reinterpret_cast<char*>(encoded.data()), static_cast<size_t>(len)};
+        std::string encoded;
+        // EVP_EncodeBlock writes 4 output bytes per 3 input bytes plus a NUL; encode directly into the string.
+        encoded.resize_and_overwrite(4 * ((data.size() + 2) / 3) + 1, [&](char *buf, size_t) {
+            return static_cast<size_t>(EVP_EncodeBlock(reinterpret_cast<unsigned char *>(buf), data.data(),
+                                                       static_cast<int>(data.size())));
+        });
+        return encoded;
     }
 }
 
@@ -37,25 +43,38 @@ std::expected<Credentials, std::string> load_credentials_from_env() {
     return Credentials{.key_id = key_id, .private_key_path = key_path};
 }
 
-std::expected<std::string, std::string> sign(const std::string& private_key_path, const std::string& message) {
-    std::unique_ptr<BIO, decltype(&BIO_free)> bio(BIO_new_file(private_key_path.c_str(), "r"), BIO_free);
+std::expected<Signer, std::string> Signer::from_credentials(const Credentials &credentials) {
+    std::unique_ptr<BIO, decltype(&BIO_free)> bio(BIO_new_file(credentials.private_key_path.c_str(), "r"), BIO_free);
     if (!bio) {
-        return std::unexpected("Failed to open private key file: " + private_key_path);
+        return std::unexpected("Failed to open private key file: " + credentials.private_key_path);
     }
-
-    std::unique_ptr<EVP_PKEY, decltype(&EVP_PKEY_free)> pkey(
-        PEM_read_bio_PrivateKey(bio.get(), nullptr, nullptr, nullptr), EVP_PKEY_free);
-    if (!pkey) {
+    EVP_PKEY *key = PEM_read_bio_PrivateKey(bio.get(), nullptr, nullptr, nullptr);
+    if (!key) {
         return std::unexpected("Failed to parse private key: " + ssl_error_string());
     }
+    return Signer{credentials.key_id, key};
+}
 
+std::expected<std::string, std::string> Signer::auth_headers(std::string_view method, std::string_view path) const {
+    const std::string timestamp = current_timestamp_ms();
+    auto signature = sign(std::format("{}{}{}", timestamp, method, path));
+    if (!signature) {
+        return std::unexpected("Failed to sign request: " + signature.error());
+    }
+    return std::format("KALSHI-ACCESS-KEY: {}\r\n"
+                       "KALSHI-ACCESS-SIGNATURE: {}\r\n"
+                       "KALSHI-ACCESS-TIMESTAMP: {}\r\n",
+                       _key_id, *signature, timestamp);
+}
+
+std::expected<std::string, std::string> Signer::sign(std::string_view message) const {
     std::unique_ptr<EVP_MD_CTX, decltype(&EVP_MD_CTX_free)> mdctx(EVP_MD_CTX_new(), EVP_MD_CTX_free);
     if (!mdctx) {
         return std::unexpected("Failed to create digest context");
     }
 
     EVP_PKEY_CTX* pctx = nullptr;
-    if (EVP_DigestSignInit(mdctx.get(), &pctx, EVP_sha256(), nullptr, pkey.get()) != 1) {
+    if (EVP_DigestSignInit(mdctx.get(), &pctx, EVP_sha256(), nullptr, _key.get()) != 1) {
         return std::unexpected("EVP_DigestSignInit failed: " + ssl_error_string());
     }
 

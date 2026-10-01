@@ -1,45 +1,80 @@
 #include "market_state.hpp"
 
-#include <algorithm>
-#include <cmath>
+#include <format>
+
+#include "fixed_point.hpp"
 
 namespace {
-    int64_t to_cents(const std::string& s) {
-        return std::llround(std::stod(s) * 100);
+    std::expected<Price, std::string> parse_price(const std::string &s) {
+        const auto cents = parse_fixed<2>(s);
+        if (!cents || *cents < 1 || *cents >= kMaxPriceCents)
+            return std::unexpected(std::format("invalid price '{}'", s));
+        return *cents;
     }
-    std::optional<Price> best_price(const OrderBook& book) {
-        if (book.empty())
-            return std::nullopt;
-        return std::ranges::max_element(book, {}, [](const auto& level) { return level.first; })->first;
+
+    std::expected<Quantity, std::string> parse_quantity(const std::string &s) {
+        const auto qty = parse_fixed<2>(s);
+        if (!qty)
+            return std::unexpected(std::format("invalid quantity '{}'", s));
+        return *qty;
+    }
+
+    Price scan_best(const MarketState::Levels &levels, Price from) {
+        for (Price p = from; p > 0; --p)
+            if (levels[p] > 0)
+                return p;
+        return 0;
     }
 } // namespace
-void MarketState::apply_snapshot(const OrderBookSnapshot &snapshot) {
+
+std::expected<void, std::string> MarketState::apply_snapshot(const OrderBookSnapshot &snapshot) {
+    // Parse into scratch arrays first so a malformed snapshot leaves the current book untouched.
+    Levels yes{}, no{};
+    for (auto [side, levels]: {std::pair{&snapshot.yes_dollars_fp, &yes}, std::pair{&snapshot.no_dollars_fp, &no}}) {
+        for (const auto &[price_str, qty_str]: *side) {
+            auto price = parse_price(price_str);
+            if (!price)
+                return std::unexpected(price.error());
+            auto qty = parse_quantity(qty_str);
+            if (!qty)
+                return std::unexpected(qty.error());
+            (*levels)[*price] = *qty;
+        }
+    }
     _market_ticker = snapshot.market_ticker;
-    _yes_levels.clear();
-    _no_levels.clear();
-    for (const auto &[price, qty]: snapshot.yes_dollars_fp) {
-        _yes_levels[to_cents(price)] = to_cents(qty);
-    }
-    for (const auto &[price, qty]: snapshot.no_dollars_fp) {
-        _no_levels[to_cents(price)] = to_cents(qty);
-    }
-}
-void MarketState::apply_delta(const OrderBookDelta &delta) {
-    auto &book = (delta.side == "yes") ? _yes_levels : _no_levels;
-    const auto price = to_cents(delta.price_dollars);
-    const auto qty = to_cents(delta.delta_fp);
-    book[price] += qty;
-    if (book[price] <= 0)
-        book.erase(price);
+    _yes = yes;
+    _no = no;
+    _best_yes = scan_best(_yes, kMaxPriceCents - 1);
+    _best_no = scan_best(_no, kMaxPriceCents - 1);
+    return {};
 }
 
-// Kalshi books only contain bids. A NO bid at p is equivalent to a YES ask at 100 - p.
-std::optional<Price> MarketState::best_yes_bid() const {
-    return best_price(_yes_levels);
-}
-std::optional<Price> MarketState::best_yes_ask() const {
-    auto best_no_bid = best_price(_no_levels);
-    if (!best_no_bid)
-        return std::nullopt;
-    return kMaxPriceCents - *best_no_bid;
+std::expected<void, std::string> MarketState::apply_delta(const OrderBookDelta &delta) {
+    const bool is_yes = delta.side == "yes";
+    if (!is_yes && delta.side != "no")
+        return std::unexpected(std::format("invalid side '{}'", delta.side));
+    auto price = parse_price(delta.price_dollars);
+    if (!price)
+        return std::unexpected(price.error());
+    auto qty = parse_quantity(delta.delta_fp);
+    if (!qty)
+        return std::unexpected(qty.error());
+
+    auto &levels = is_yes ? _yes : _no;
+    auto &best = is_yes ? _best_yes : _best_no;
+
+    Quantity &level = levels[*price];
+    level += *qty;
+
+    std::expected<void, std::string> result{};
+    if (level < 0) {
+        result = std::unexpected(std::format("book out of sync: {} level {}c went negative", delta.side, *price));
+        level = 0;
+    }
+
+    if (level > 0 && *price > best)
+        best = *price;
+    else if (level == 0 && *price == best)
+        best = scan_best(levels, *price - 1);
+    return result;
 }

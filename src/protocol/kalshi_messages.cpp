@@ -1,9 +1,11 @@
 #include "kalshi_messages.hpp"
 
 #include <algorithm>
+#include <charconv>
 #include <format>
 #include <functional>
 #include <optional>
+#include <ranges>
 
 #include "json_parser.hpp"
 namespace {
@@ -71,11 +73,11 @@ namespace {
         auto res = std::get_if<std::string>(&it->second.data);
         if (!res)
             return std::nullopt;
-        try {
-            return std::stoll(*res);
-        } catch (...) {
+        uint64_t value{};
+        const auto [end, ec] = std::from_chars(res->data(), res->data() + res->size(), value);
+        if (ec != std::errc{} || end != res->data() + res->size())
             return std::nullopt;
-        }
+        return value;
     }
 
     std::expected<OrderBookDelta, std::string> parse_delta(const JsonObject &msg_obj) {
@@ -150,23 +152,7 @@ namespace {
                                  .yes_dollars_fp = std::move(yes_levels),
                                  .no_dollars_fp = std::move(no_levels)};
     }
-    std::expected<Fill, std::string> parse_fill(const JsonValue& json) {
-
-        auto root_obj_ptr = std::get_if<JsonObject>(&json.data);
-        if (!root_obj_ptr)
-            return std::unexpected("Root JSON is not an object");
-
-        const JsonObject &root_obj = *root_obj_ptr;
-        auto msg_type = get_string(root_obj, "type");
-        if (!msg_type)
-            return std::unexpected("Missing or invalid 'type' field");
-
-        auto msg_obj_ptr = get_object(root_obj, "msg");
-        if (!msg_obj_ptr)
-            return std::unexpected("Missing 'msg' object in Kalshi message");
-
-        const JsonObject &msg_obj = msg_obj_ptr->get();
-
+    std::expected<Fill, std::string> parse_fill(const JsonObject &msg_obj) {
         const auto order_id = get_string(msg_obj, "order_id");
         const auto market_ticker = get_string(msg_obj, "market_ticker");
         const auto count_fp = get_string(msg_obj, "count_fp");
@@ -193,8 +179,32 @@ namespace {
     }
 } // namespace
 
-// Compact re-serialization for error messages. Numbers are stored as strings by the lexer,
-// so they come back quoted; good enough for diagnostics.
+namespace {
+    // Quotes and escapes a string so the output is always valid JSON.
+    std::string json_quote(const std::string_view s) {
+        std::string out;
+        out.reserve(s.size() + 2);
+        out += '"';
+        for (const char c: s) {
+            switch (c) {
+                case '"': out += "\\\""; break;
+                case '\\': out += "\\\\"; break;
+                case '\n': out += "\\n"; break;
+                case '\r': out += "\\r"; break;
+                case '\t': out += "\\t"; break;
+                default:
+                    if (static_cast<unsigned char>(c) < 0x20)
+                        out += std::format("\\u{:04x}", static_cast<unsigned char>(c));
+                    else
+                        out += c;
+            }
+        }
+        out += '"';
+        return out;
+    }
+} // namespace
+
+// Numbers are stored as text by the parser, so they come back quoted; good enough for diagnostics.
 std::string to_json_string(const JsonValue &value) {
     return std::visit(
             [](const auto &v) -> std::string {
@@ -204,19 +214,16 @@ std::string to_json_string(const JsonValue &value) {
                 else if constexpr (std::is_same_v<T, bool>)
                     return v ? "true" : "false";
                 else if constexpr (std::is_same_v<T, std::string>)
-                    return std::format("\"{}\"", v);
+                    return json_quote(v);
                 else if constexpr (std::is_same_v<T, JsonArray>) {
                     std::string out = "[";
-                    for (size_t i = 0; i < v.size(); ++i)
-                        out += (i ? "," : "") + to_json_string(v[i]);
+                    for (const auto &[i, element]: std::views::enumerate(v))
+                        out += (i ? "," : "") + to_json_string(element);
                     return out + "]";
                 } else {
                     std::string out = "{";
-                    bool first = true;
-                    for (const auto &[key, val]: v) {
-                        out += std::format("{}\"{}\":{}", first ? "" : ",", key, to_json_string(val));
-                        first = false;
-                    }
+                    for (const auto &[i, member]: std::views::enumerate(v))
+                        out += std::format("{}{}:{}", i ? "," : "", json_quote(member.first), to_json_string(member.second));
                     return out + "}";
                 }
             },
@@ -225,56 +232,37 @@ std::string to_json_string(const JsonValue &value) {
 
 
 std::expected<Message, std::string> parse_kalshi_message(const JsonValue &json) {
-
     auto root_obj_ptr = std::get_if<JsonObject>(&json.data);
     if (!root_obj_ptr)
         return std::unexpected("Root JSON is not an object");
-
     const JsonObject &root_obj = *root_obj_ptr;
 
     const auto msg_type = get_string(root_obj, "type");
     if (!msg_type)
         return std::unexpected("Missing or invalid 'type' field");
 
+    // sid identifies the subscription, seq orders its messages; used to detect dropped deltas.
+    const auto sid = static_cast<uint32_t>(get_uint64(root_obj, "sid").value_or(0));
+    const auto seq = static_cast<uint32_t>(get_uint64(root_obj, "seq").value_or(0));
+    auto make = [&](auto &&payload) {
+        return Message{.type = *msg_type, .sid = sid, .seq = seq, .msg = std::forward<decltype(payload)>(payload)};
+    };
+
+    if (*msg_type == "subscribed")
+        return make(std::monostate{});
+
     auto msg_obj_ptr = get_object(root_obj, "msg");
     if (!msg_obj_ptr)
-        return std::unexpected("Missing 'msg' object in Kalshi message");
-
+        return std::unexpected(std::format("Missing 'msg' object in '{}' message", *msg_type));
     const JsonObject &msg_obj = msg_obj_ptr->get();
 
-    if (*msg_type == "orderbook_delta") {
-        auto delta_result = parse_delta(msg_obj);
-        if (!delta_result)
-            return std::unexpected(delta_result.error());
-
-        return Message{.type = *msg_type, .sid = 0, .seq = 0, .msg = std::move(delta_result.value())};
-
-    } else if (*msg_type == "orderbook_snapshot") {
-        auto snapshot_result = parse_snapshot(msg_obj);
-        if (!snapshot_result)
-            return std::unexpected(snapshot_result.error());
-
-        return Message{.type = *msg_type, .sid = 0, .seq = 0, .msg = std::move(snapshot_result.value())};
-    } else if (*msg_type == "subscribed") {
-        return Message {
-            .type = *msg_type,
-            .sid = 0,
-            .seq = 0,
-            .msg = std::monostate{}
-        };
-    } else if (*msg_type == "fill") {
-        auto fill_result = parse_fill(json);
-        if (!fill_result)
-            return std::unexpected(fill_result.error());
-        return Message{
-            .type = *msg_type,
-            .sid = 0,
-            .seq = 0,
-            .msg = std::move(fill_result.value())
-        };
-    } else {
-        return std::unexpected("Unknown message type: " + *msg_type);
-    }
+    if (*msg_type == "orderbook_delta")
+        return parse_delta(msg_obj).transform(make);
+    if (*msg_type == "orderbook_snapshot")
+        return parse_snapshot(msg_obj).transform(make);
+    if (*msg_type == "fill")
+        return parse_fill(msg_obj).transform(make);
+    return std::unexpected("Unknown message type: " + *msg_type);
 }
 
 std::expected<OrderResponse, std::string> parse_order_response(const JsonValue& json) {

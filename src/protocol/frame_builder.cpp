@@ -1,6 +1,8 @@
 
 #include "../../include/frame_builder.hpp"
 
+#include <utility>
+
 #include <openssl/rand.h>
 
 std::expected<std::vector<std::byte>, std::string> frame_builder(const WebSocketFrame& frame) {
@@ -11,7 +13,7 @@ std::expected<std::vector<std::byte>, std::string> frame_builder(const WebSocket
     else if (frame.payload.size() > 125) header_size += 2;
     outgoing_frame.reserve(header_size + 4 + frame.payload.size());
 
-    auto byte0 = std::byte {0x80} | static_cast<std::byte>(frame.op_code);
+    auto byte0 = std::byte {0x80} | std::byte{std::to_underlying(frame.op_code)};
     outgoing_frame.push_back(byte0); // FIN=1, opcode=Pong
 
 

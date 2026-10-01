@@ -1,6 +1,8 @@
 #include "tls_socket.hpp"
 #include "net_constants.hpp"
 #include <array>
+#include <cerrno>
+#include <cstring>
 #include <format>
 #include "openssl_util.hpp"
 
@@ -56,7 +58,20 @@ std::expected<std::vector<std::byte>, std::string> TlsSocket::receive_data() con
     std::array<char, kReceiveBufferSize> buffer{};
     const int bytes = SSL_read(_ssl.get(), buffer.data(), static_cast<int>(buffer.size()));
     if (bytes <= 0) {
-        return std::unexpected(std::format("SSL_read failed: {}", ssl_error_string()));
+        switch (SSL_get_error(_ssl.get(), bytes)) {
+            case SSL_ERROR_ZERO_RETURN:
+                return std::unexpected("connection closed by peer");
+            case SSL_ERROR_WANT_READ: // blocking socket + SO_RCVTIMEO: recv returned EAGAIN
+                return std::unexpected("receive timed out");
+            case SSL_ERROR_SYSCALL:
+                if (errno == EINTR)
+                    return std::unexpected("interrupted");
+                if (errno == 0)
+                    return std::unexpected("connection closed by peer (no TLS close_notify)");
+                return std::unexpected(std::format("SSL_read failed: {}", std::strerror(errno)));
+            default:
+                return std::unexpected(std::format("SSL_read failed: {}", ssl_error_string()));
+        }
     }
     auto* begin = reinterpret_cast<const std::byte*>(buffer.data());
     return std::vector<std::byte>(begin, begin + bytes);

@@ -5,3 +5,18 @@ build/
 .env
 .clang-format
 NOTES.md
+
+# libFuzzer: generated corpus (seeds live in fuzz/corpus/) and crash reproducers
+fuzz/work/
+crash-*
+oom-*
+leak-*
+timeout-*
+slow-unit-*
+
+# Tooling caches and profiling output
+.cache/
+compile_commands.json
+perf.data*
+*.profraw
+*.profdata

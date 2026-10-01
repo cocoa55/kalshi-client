@@ -30,19 +30,11 @@ std::expected<std::string, std::string>generate_websocket_key() {
 
 }
 
-std::expected<void, std::string> WebSocket::connect(const std::string &host, const std::string &port) {
-
-    auto credentials = kalshi_auth::load_credentials_from_env();
-    if (!credentials.has_value()) {
-        return std::unexpected(std::format("Missing Kalshi credentials: {}", credentials.error()));
-    }
-
-    const std::string timestamp = current_timestamp_ms();
-    const std::string signing_message = timestamp + "GET" + std::string{kWebSocketPath};
-
-    auto signature = kalshi_auth::sign(credentials->private_key_path, signing_message);
-    if (!signature.has_value()) {
-        return std::unexpected(std::format("Failed to sign request: {}", signature.error()));
+std::expected<void, std::string> WebSocket::connect(const std::string &host, const std::string &port,
+                                                    const kalshi_auth::Signer &signer) {
+    auto auth_headers = signer.auth_headers("GET", kWebSocketPath);
+    if (!auth_headers) {
+        return std::unexpected(auth_headers.error());
     }
 
     auto tls_result = _tls_socket.connect(host, port);
@@ -63,10 +55,8 @@ std::expected<void, std::string> WebSocket::connect(const std::string &host, con
         "Connection: Upgrade\r\n"
         "Sec-WebSocket-Key: {}\r\n"
         "Sec-WebSocket-Version: 13\r\n"
-        "KALSHI-ACCESS-KEY: {}\r\n"
-        "KALSHI-ACCESS-TIMESTAMP: {}\r\n"
-        "KALSHI-ACCESS-SIGNATURE: {}\r\n"
-        "\r\n", kWebSocketPath, host, websocket_key_result.value(), credentials->key_id, timestamp, *signature);
+        "{}"
+        "\r\n", kWebSocketPath, host, websocket_key, *auth_headers);
 
     std::span<const std::byte> request_bytes{reinterpret_cast<const std::byte *>(upgrade_request.data()),
                                              upgrade_request.size()};
@@ -86,12 +76,8 @@ std::expected<void, std::string> WebSocket::connect(const std::string &host, con
             receive_result->size()
     );
 
-    std::println("\n--- Kalshi Server Response ---");
-    std::println("{}", response);
-    std::println("------------------------------");
-
     if (!response.starts_with("HTTP/1.1 101")) {
-        return std::unexpected("Handshake rejected (expected HTTP 101 Switching Protocols)");
+        return std::unexpected(std::format("Handshake rejected: {}", response.substr(0, response.find("\r\n"))));
     }
 
     return {};
@@ -139,5 +125,11 @@ std::expected<void, std::string> WebSocket::send_pong(const WebSocketFrame& ping
                                      .payload = ping_frame.payload};
     return send_frame(pong_frame);
 }
-//std::expected<void, std::string> send_ping() TODO :
+std::expected<void, std::string> WebSocket::send_text(const std::string_view text) {
+    const auto *begin = reinterpret_cast<const std::byte *>(text.data());
+    return send_frame(WebSocketFrame{.fin_bit = true,
+                                     .op_code = WebSocketFrame::Opcode::Text,
+                                     .mask_key = std::nullopt,
+                                     .payload = std::vector(begin, begin + text.size())});
+}
 
