@@ -5,6 +5,7 @@ build/
 .env
 .clang-format
 NOTES.md
+docs/
 
 # libFuzzer: generated corpus (seeds live in fuzz/corpus/) and crash reproducers
 fuzz/work/
