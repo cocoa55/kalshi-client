@@ -142,6 +142,5 @@ kalshi-client/
 │   └── trading/              # market_state, strategy, trading_bot
 ├── tests/                    # unit tests + minimal test framework
 ├── fuzz/                     # libFuzzer targets and seed corpora
-├── bench/                    # micro-benchmarks
-└── docs/                     # write-ups
+└── bench/                    # micro-benchmarks
 ```
