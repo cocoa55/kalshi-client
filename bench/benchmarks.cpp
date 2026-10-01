@@ -107,8 +107,8 @@ int main(int argc, char **argv) {
             auto v = static_cast<int64_t>(std::stod(prices[i % 99]) * 100);
             do_not_optimize(v);
         });
-        ns_per_op("price: parse_fixed<2> (new)", 2'000'000, [&](int i) {
-            auto v = parse_fixed<2>(prices[i % 99]);
+        ns_per_op("price: parse_fixed (new)", 2'000'000, [&](int i) {
+            auto v = parse_fixed<kPriceDecimals>(prices[i % 99]);
             do_not_optimize(v);
         });
     }

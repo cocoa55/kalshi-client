@@ -22,8 +22,11 @@ namespace {
     // The bot only places whole-contract orders, so fills are whole contracts ("1.00").
     std::optional<Quantity> parse_contracts(const std::string &count_fp) { return parse_fixed<0>(count_fp); }
 
-    std::string price_str(const std::optional<Price> p) {
-        return p.transform([](const Price cents) { return std::format("{}c", cents); }).value_or("-");
+    std::string price_str(const std::optional<Price> p) { return p.transform(format_price).value_or("-"); }
+
+    // Fair value is a fractional number of ticks; show it in cents like everything else.
+    std::string fair_str(const std::optional<double> fair) {
+        return fair.transform([](const double ticks) { return std::format("{:.1f}c", ticks / kTicksPerCent); }).value_or("-");
     }
 
     bool is_book_message(const Message &m) {
@@ -50,8 +53,8 @@ void TradingBot::submit(const Signal &signal, const Clock::time_point tick_time)
     _tick_to_order.record(_http.last_send_time() - tick_time);
     _order_round_trip.record(done_at - sent_at);
 
-    std::println("[order] {} {} @ {}c (fair {:.1f}, exposure {})", signal.side == OrderSide::Bid ? "BUY" : "SELL",
-                 signal.count, signal.price, _strategy.fair_value().value_or(0), exposure());
+    std::println("[order] {} {} @ {} (fair {}, exposure {})", signal.side == OrderSide::Bid ? "BUY" : "SELL",
+                 signal.count, format_price(signal.price), fair_str(_strategy.fair_value()), exposure());
     if (!response) {
         std::println(stderr, "[order] request failed: {}", response.error());
         return;
@@ -99,6 +102,17 @@ void TradingBot::on_fill(const Fill &fill) {
                  _positions.get_position(fill.market_ticker));
 }
 
+// Out-of-sync books are fixed by resubscribing (the caller drops the session). Malformed data won't be fixed by
+// a fresh snapshot, and resubscribing would just loop forever, so stop instead.
+void TradingBot::on_book_error(const BookError &error) {
+    if (error.kind == BookError::Kind::OutOfSync) {
+        std::println(stderr, "[book] {}; resubscribing", error.message);
+        return;
+    }
+    std::println(stderr, "[book] {}; stopping (resubscribing would get the same data)", error.message);
+    request_stop();
+}
+
 void TradingBot::keep_http_warm() {
     if (_http.connected() && _http.idle_for() < kHttpKeepWarmAfter)
         return;
@@ -107,9 +121,9 @@ void TradingBot::keep_http_warm() {
 }
 
 void TradingBot::print_status() const {
-    std::println("[status] bid {} ask {} fair {:.1f} position {} exposure {} | http connections opened: {}",
+    std::println("[status] bid {} ask {} fair {} position {} exposure {} | http connections opened: {}",
                  price_str(_book.best_yes_bid()), price_str(_book.best_yes_ask()),
-                 _strategy.fair_value().value_or(0), _positions.get_position(_ticker), exposure(),
+                 fair_str(_strategy.fair_value()), _positions.get_position(_ticker), exposure(),
                  _http.connections_opened());
 }
 
@@ -181,13 +195,13 @@ bool TradingBot::run_session() {
             bool book_changed = false;
             if (auto *snapshot = std::get_if<OrderBookSnapshot>(&message->msg)) {
                 if (auto r = _book.apply_snapshot(*snapshot); !r) {
-                    std::println(stderr, "[book] bad snapshot: {}; resubscribing", r.error());
+                    on_book_error(r.error());
                     return received_data;
                 }
                 book_changed = received_data = true;
             } else if (auto *delta = std::get_if<OrderBookDelta>(&message->msg)) {
                 if (auto r = _book.apply_delta(*delta); !r) {
-                    std::println(stderr, "[book] {}; resubscribing", r.error());
+                    on_book_error(r.error());
                     return received_data;
                 }
                 book_changed = true;
@@ -215,8 +229,8 @@ bool TradingBot::run_session() {
 
 void TradingBot::run() {
     const auto &cfg = _strategy.config();
-    std::println("Trading {} | edge {}c, max spread {}c, max position {}, cooldown {}s", _ticker, cfg.entry_edge,
-                 cfg.max_spread, cfg.max_position, cfg.cooldown.count());
+    std::println("Trading {} | edge {}, max spread {}, max position {}, cooldown {}s", _ticker,
+                 format_price(cfg.entry_edge), format_price(cfg.max_spread), cfg.max_position, cfg.cooldown.count());
 
     if (auto r = _http.connect(); !r)
         std::println(stderr, "[http] could not pre-open order connection: {}", r.error());

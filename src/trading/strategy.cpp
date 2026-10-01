@@ -49,7 +49,7 @@ OrderRequest make_ioc_order(const std::string &ticker, const Signal &signal, con
     return OrderRequest{.ticker = ticker,
                         .side = signal.side,
                         .count = std::format("{}.00", signal.count),
-                        .price = std::format("{}.{:02}", signal.price / 100, signal.price % 100),
+                        .price = price_to_dollars(signal.price),
                         .time_in_force = TimeInForce::ImmediateOrCancel,
                         .self_trade_prevention = SelfTradePrevention::TakerAtCross,
                         .client_order_id = client_order_id,

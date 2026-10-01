@@ -40,6 +40,7 @@ class TradingBot {
     Quantity exposure() const;
     void submit(const Signal &signal, Clock::time_point tick_time);
     void on_fill(const Fill &fill);
+    void on_book_error(const BookError &error);
     void keep_http_warm();
     void print_status() const;
     bool run_session(); // returns whether the session received market data

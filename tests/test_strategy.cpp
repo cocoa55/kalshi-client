@@ -27,13 +27,13 @@ TEST(strategy_buys_when_offer_drops_below_fair) {
     auto s = warmed_up(t0);
     const auto signal = s.on_book_update(book(24, 26), 0, t);
     CHECK(signal.has_value());
-    CHECK(signal && signal->side == OrderSide::Bid && signal->price == 26);
+    CHECK(signal && signal->side == OrderSide::Bid && signal->price == cents(26));
 }
 
 TEST(strategy_sells_when_bid_rises_above_fair) {
     auto s = warmed_up(t0);
     const auto signal = s.on_book_update(book(34, 36), 0, t);
-    CHECK(signal && signal->side == OrderSide::Ask && signal->price == 34);
+    CHECK(signal && signal->side == OrderSide::Ask && signal->price == cents(34));
 }
 
 TEST(strategy_respects_cooldown_limits_and_spread) {
@@ -57,8 +57,8 @@ TEST(strategy_does_not_trade_during_warmup_or_on_bad_books) {
 }
 
 TEST(strategy_builds_ioc_order) {
-    const auto order = make_ioc_order("T", Signal{.side = OrderSide::Ask, .price = 7, .count = 2}, "c1");
-    CHECK_EQ(order.price, std::string{"0.07"});
+    const auto order = make_ioc_order("T", Signal{.side = OrderSide::Ask, .price = cents(7), .count = 2}, "c1");
+    CHECK_EQ(order.price, std::string{"0.0700"});
     CHECK_EQ(order.count, std::string{"2.00"});
     CHECK(order.time_in_force == TimeInForce::ImmediateOrCancel);
 }

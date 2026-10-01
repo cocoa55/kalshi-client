@@ -9,8 +9,8 @@
 struct StrategyConfig {
     std::chrono::seconds ema_time_constant{60}; // how quickly "fair value" adapts
     std::chrono::seconds warmup{60};            // observe this long before the first trade
-    Price entry_edge{3};                        // cents the touch must be away from the EMA
-    Price max_spread{4};                        // don't cross spreads wider than this (cents)
+    Price entry_edge{cents(3)};                 // how far the touch must be from the EMA
+    Price max_spread{cents(4)};                 // don't cross spreads wider than this
     Quantity max_position{5};                   // hard cap on |position| in contracts
     Quantity order_size{1};                     // contracts per order
     std::chrono::seconds cooldown{5};           // minimum time between orders
@@ -18,7 +18,7 @@ struct StrategyConfig {
 
 struct Signal {
     OrderSide side;
-    Price price; // YES price in cents
+    Price price; // YES price in ticks ($0.001)
     Quantity count;
 };
 

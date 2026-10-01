@@ -14,7 +14,7 @@ It streams a market's order book over a WebSocket, keeps a local copy of the boo
 | **HTTP/1.1** (`http_client`, `http_response`) | Keep-alive connection reuse with dead-connection detection, `Content-Length` and chunked bodies, safe retry rules for orders |
 | **JSON** (`json_lexer`, `json_parser`, `kalshi_decoder`) | Pull lexer producing `string_view` tokens, strict RFC 8259 grammar with escapes and UTF-16 surrogates, depth limit; WebSocket messages decode straight from tokens into typed structs without an intermediate tree |
 | **Auth** (`kalshi_auth`) | RSA-PSS/SHA-256 request signing with the key parsed once at startup |
-| **Order book** (`market_state`) | Fixed `std::array` per side indexed by price in cents, incrementally maintained best bid, integer fixed-point parsing |
+| **Order book** (`market_state`) | Fixed `std::array` per side indexed by price at $0.001 resolution (Kalshi's finest tick), incrementally maintained best bid, integer fixed-point parsing |
 | **Bot** (`trading_bot`) | Single-threaded loop with sequence-gap detection, exponential-backoff reconnect, and per-stage latency percentiles |
 
 ## Performance
@@ -25,7 +25,7 @@ Measured with `bench/benchmarks.cpp` (Release, median of 5 runs). "Before" is th
 |---|---:|---:|---|
 | Decode an order-book delta (265 B) | 2.29 µs | 0.73 µs | 3.1× |
 | Decode a 40-level snapshot (1.8 KB) | 23.2 µs | 6.8 µs | 3.4× |
-| Apply a delta + read top of book | 196 ns | 97 ns | 2.0× |
+| Apply a delta + read top of book | 196 ns | 124 ns | 1.6× |
 | Parse a price string | 80 ns | 12 ns | 6.7× |
 | Sign a request | 903 µs | 531 µs | 1.7× |
 | HTTPS request to the demo API | 249 ms | 82 ms | saves one TCP + TLS handshake (~168 ms) per order |
