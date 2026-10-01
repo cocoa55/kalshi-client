@@ -1,7 +1,16 @@
 #include "market_state.hpp"
+
+#include <algorithm>
+#include <cmath>
+
 namespace {
     int64_t to_cents(const std::string& s) {
-        return static_cast<int64_t>(std::stod(s) * 100);
+        return std::llround(std::stod(s) * 100);
+    }
+    std::optional<Price> best_price(const OrderBook& book) {
+        if (book.empty())
+            return std::nullopt;
+        return std::ranges::max_element(book, {}, [](const auto& level) { return level.first; })->first;
     }
 } // namespace
 void MarketState::apply_snapshot(const OrderBookSnapshot &snapshot) {
@@ -22,4 +31,15 @@ void MarketState::apply_delta(const OrderBookDelta &delta) {
     book[price] += qty;
     if (book[price] <= 0)
         book.erase(price);
+}
+
+// Kalshi books only contain bids. A NO bid at p is equivalent to a YES ask at 100 - p.
+std::optional<Price> MarketState::best_yes_bid() const {
+    return best_price(_yes_levels);
+}
+std::optional<Price> MarketState::best_yes_ask() const {
+    auto best_no_bid = best_price(_no_levels);
+    if (!best_no_bid)
+        return std::nullopt;
+    return kMaxPriceCents - *best_no_bid;
 }

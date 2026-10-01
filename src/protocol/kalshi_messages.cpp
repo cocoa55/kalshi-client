@@ -193,6 +193,36 @@ namespace {
     }
 } // namespace
 
+// Compact re-serialization for error messages. Numbers are stored as strings by the lexer,
+// so they come back quoted; good enough for diagnostics.
+std::string to_json_string(const JsonValue &value) {
+    return std::visit(
+            [](const auto &v) -> std::string {
+                using T = std::decay_t<decltype(v)>;
+                if constexpr (std::is_same_v<T, std::monostate>)
+                    return "null";
+                else if constexpr (std::is_same_v<T, bool>)
+                    return v ? "true" : "false";
+                else if constexpr (std::is_same_v<T, std::string>)
+                    return std::format("\"{}\"", v);
+                else if constexpr (std::is_same_v<T, JsonArray>) {
+                    std::string out = "[";
+                    for (size_t i = 0; i < v.size(); ++i)
+                        out += (i ? "," : "") + to_json_string(v[i]);
+                    return out + "]";
+                } else {
+                    std::string out = "{";
+                    bool first = true;
+                    for (const auto &[key, val]: v) {
+                        out += std::format("{}\"{}\":{}", first ? "" : ",", key, to_json_string(val));
+                        first = false;
+                    }
+                    return out + "}";
+                }
+            },
+            value.data);
+}
+
 
 std::expected<Message, std::string> parse_kalshi_message(const JsonValue &json) {
 
@@ -258,7 +288,12 @@ std::expected<OrderResponse, std::string> parse_order_response(const JsonValue& 
     auto ts_ms = get_uint64(root_obj, "ts_ms");
     auto client_order_id = get_string(root_obj, "client_order_id");
 
-    if (!order_id || !fill_count || !remaining_count || !ts_ms) return std::unexpected("Missing fields in order response");
+    if (!order_id || !fill_count || !remaining_count || !ts_ms) {
+        std::string body = to_json_string(json);
+        if (body.size() > 1000)
+            body = body.substr(0, 1000) + "...";
+        return std::unexpected("Unexpected order response: " + body);
+    }
 
 
     return OrderResponse {

@@ -1,4 +1,5 @@
 #pragma once
+#include <optional>
 #include <string>
 #include <unordered_map>
 #include "kalshi_messages.hpp"
@@ -6,6 +7,8 @@
 using Price = int64_t;
 using Quantity = int64_t;
 using OrderBook = std::unordered_map<Price, Quantity>;
+
+inline constexpr Price kMaxPriceCents = 100;
 
 class MarketState {
     std::string _market_ticker;
@@ -17,4 +20,6 @@ public:
     const std::string& ticker() const {return _market_ticker;}
     const OrderBook& yes() const {return _yes_levels;}
     const OrderBook& no() const {return _no_levels;}
+    std::optional<Price> best_yes_bid() const;
+    std::optional<Price> best_yes_ask() const;
 };

@@ -72,4 +72,5 @@ struct OrderResponse {
 
 std::expected<Message, std::string> parse_kalshi_message(const JsonValue &json);
 std::string serialize_order_request(const OrderRequest& order);
+std::string to_json_string(const JsonValue &value);
 std::expected<OrderResponse, std::string> parse_order_response(const JsonValue& json);

@@ -36,6 +36,8 @@ add_executable(kalshi-client main.cpp
         include/order_tracker.hpp
         include/order_tracker.hpp
         include/position_tracker.hpp
+        include/strategy.hpp
+        src/trading/strategy.cpp
 )
 target_include_directories(kalshi-client PRIVATE ${CMAKE_SOURCE_DIR}/include)
 find_package(OpenSSL REQUIRED)

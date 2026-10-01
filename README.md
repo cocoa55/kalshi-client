@@ -5,6 +5,7 @@ A C++23 client for Kalshi's trading API, built from scratch (raw POSIX sockets, 
 ## What it does at the moment
 Connects to Kalshi's WebSocket API, performs a TLS handshake, upgrades to WebSocket, parses incoming frames, and responds to server pings with pongs. Built from scratch using raw POSIX sockets and OpenSSL with no external networking or parsing libraries.
 Parses incoming JSON market data into C++ structs using a custom lexer and parser. Tracks market state, manages orders, and updates positions on fills.
+Runs an autonomous mean-reversion strategy that trades a single market continuously, reconnecting on its own when the connection drops.
 
 ## Status
 
@@ -13,7 +14,27 @@ Parses incoming JSON market data into C++ structs using a custom lexer and parse
 - [x] Phase 3: JSON parser
 - [x] Phase 4: REST order management
 - [x] Phase 5: Order management system
-- [ ] Phase 6: Trading logic
+- [x] Phase 6: Trading logic
+
+## Trading strategy
+
+`MeanReversionStrategy` (`src/trading/strategy.cpp`) trades one market:
+
+1. **Fair value** comes from a time-decayed EMA of the YES mid price (τ = 60s). The weight depends on elapsed time, not message count, so a burst of deltas doesn't skew it.
+2. **Entry:** buy when the best YES ask is ≥ 3¢ below fair value. Sell when the best YES bid is ≥ 3¢ above it.
+3. **Filters:** no trading during a 60s warmup, on one-sided or crossed books, or when the spread is wider than 4¢.
+4. **Risk:** a hard cap of ±5 contracts, 1 contract per order, and a 5s cooldown between orders.
+5. **Orders are immediate-or-cancel.** Nothing rests on the book, so no cancel logic is needed and a disconnect can't leave stale orders behind.
+
+Position comes from the WebSocket `fill` channel. Fills reported by the REST response but not yet confirmed on the WebSocket still count toward the position limit. This closes the race where a second order could go out before the first fill arrives.
+
+The bot runs until `SIGINT` or `SIGTERM`. When the connection drops, it reconnects with exponential backoff (1s up to 60s) and rebuilds the book from a fresh snapshot. A 30s socket receive timeout catches connections that die silently.
+
+Tunable parameters are in `StrategyConfig` (`include/strategy.hpp`).
+
+**Exchange shards:** Kalshi keeps a separate balance for each matching-engine shard (0 = default, 2 = crypto/commodities, 3 = tennis/baseball/basketball). Orders on a shard with no money fail with `insufficient_shard_balance`. To move demo funds from shard 0, run `./cmake-build-debug/kalshi-client --fund-shard <index> <dollars>`.
+
+**Known limitations:** the bot starts out assuming a flat position (it doesn't fetch existing positions over REST), it doesn't detect sequence gaps, and it trades a single market. The bot pays the spread on every entry, so this strategy demonstrates the system end to end. It isn't expected to be profitable.
 
 ## Prerequisites
 
@@ -49,14 +70,14 @@ The client reads two environment variables:
 # fish
 set -x KALSHI_API_KEY_ID "your-key-id"
 set -x KALSHI_PRIVATE_KEY_PATH "/path/to/demo_private_key.pem"
-./cmake-build-debug/kalshi-client
+./cmake-build-debug/kalshi-client [MARKET_TICKER]
 ```
 
 ```bash
 # bash / zsh
 export KALSHI_API_KEY_ID="your-key-id"
 export KALSHI_PRIVATE_KEY_PATH="/path/to/demo_private_key.pem"
-./cmake-build-debug/kalshi-client
+./cmake-build-debug/kalshi-client [MARKET_TICKER]
 ```
 
 ### Running from CLion
@@ -87,7 +108,8 @@ kalshi-client/
 │   ├── time_util.hpp
 │   ├── market_state.hpp
 │   ├── order_tracker.hpp
-│   └── position_tracker.hpp
+│   ├── position_tracker.hpp
+│   └── strategy.hpp
 ├── src/
 │   ├── encoding/
 │   │   ├── json_lexer.cpp
@@ -99,10 +121,11 @@ kalshi-client/
 │   ├── protocol/
 │   │   ├── frame_parser.cpp
 │   │   ├── frame_builder.cpp
+│   │   ├── http_client.cpp
 │   │   ├── kalshi_messages.cpp
 │   │   └── kalshi_auth.cpp
 │   └── trading/
 │       ├── market_state.cpp
-│       └── http_client.cpp
+│       └── strategy.cpp
 └── tests/
 ```

@@ -5,7 +5,22 @@
 #include <memory>
 #include <netdb.h>
 #include <sys/socket.h>
+#include <sys/time.h>
 #include <unistd.h>
+
+TcpSocket::~TcpSocket() {
+    if (_fd != -1)
+        close(_fd);
+}
+
+TcpSocket& TcpSocket::operator=(TcpSocket&& other) noexcept {
+    if (this != &other) {
+        if (_fd != -1)
+            close(_fd);
+        _fd = std::exchange(other._fd, -1);
+    }
+    return *this;
+}
 
 std::expected<int, std::string> TcpSocket::connect(const std::string& host, const std::string& port) {
     addrinfo hints{.ai_family = AF_UNSPEC, .ai_socktype = SOCK_STREAM};
@@ -28,6 +43,10 @@ std::expected<int, std::string> TcpSocket::connect(const std::string& host, cons
             _fd = -1;
             continue;
         }
+        // Without a timeout a silently dropped connection blocks recv/SSL_read forever.
+        // Kalshi pings every ~10s, so 30s of silence means the connection is dead.
+        timeval timeout{.tv_sec = kReceiveTimeoutSeconds, .tv_usec = 0};
+        setsockopt(_fd, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout));
         return _fd;
     }
     return std::unexpected("Failed to connect to any resolved address");
