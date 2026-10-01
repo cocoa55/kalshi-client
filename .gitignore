@@ -6,7 +6,7 @@ build/
 .clang-format
 NOTES.md
 docs/
-
+docs/phase-6-and-systems-work.md
 # libFuzzer: generated corpus (seeds live in fuzz/corpus/) and crash reproducers
 fuzz/work/
 crash-*
